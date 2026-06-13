@@ -24,6 +24,7 @@ import yaml
 import provisioning
 from oradio_engine import Club, NormalizedCandidate, open_oradio
 from oradio_engine.club import DEFAULT_THEME, DEFAULT_THEME_PACKS
+from loom_narration import Narrator
 from voice_provider import get_voice_provider
 
 
@@ -195,6 +196,7 @@ class LoomPlayerApp:
             if isinstance(item, dict)
         ]
         self.triggered_transients: set[str] = set()
+        self.narrator = Narrator.from_descriptor(self.descriptor)
         self.voice = VoiceSpeaker(self.descriptor)
         self.playing = False
         self.tick_ms = 1400
@@ -413,7 +415,9 @@ class LoomPlayerApp:
                 self.beats_list.delete(0)
 
         top = max(produced, key=lambda c: c.priority)
-        line = format_candidate_line(top)
+        # Tier 1 narration: render the abstract beat into a world-grounded sentence,
+        # so the subtitles lane and the TTS both speak lines that sound like THIS world.
+        line = self.narrator.line(top)
         self.subtitle_var.set(line)
         self.status_var.set(f"{top.source} / {top.type}")
         self.now_var.set(f"tick {self.engine.clock.tick}")
