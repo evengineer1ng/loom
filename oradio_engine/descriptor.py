@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
+from oradio_engine.dipole import DipoleDecl
+
 _RESERVED_WORLD = {"organ", "name"}
 _RESERVED_TELEMETRY = {"source", "name", "binds"}
 _RESERVED_EFFECTOR = {"kind", "name"}
@@ -69,6 +71,7 @@ class OradioDescriptor:
     lens: Union[None, str, Dict[str, Any]] = None
     surfaces: List[str] = field(default_factory=list)
     club: List[str] = field(default_factory=list)
+    dipole: Optional[DipoleDecl] = None
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
@@ -127,5 +130,6 @@ class OradioDescriptor:
             lens=d.get("lens"),
             surfaces=list(d.get("surfaces", [])),
             club=list(d.get("club", [])),
+            dipole=DipoleDecl.from_dict(d.get("dipole")),
             raw=dict(d),
         )

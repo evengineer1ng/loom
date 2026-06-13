@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Union
 from oradio_engine.binding import Binding, build_effector, build_transform
 from oradio_engine.club import Club, ClubReport
 from oradio_engine.descriptor import OradioDescriptor
+from oradio_engine.dipole import DipoleMeter
 from oradio_engine.evidence import EvidenceService
 from oradio_engine.federation import Clock, FederationEngine
 from oradio_engine.lens import LensedOrgan, build_lens
@@ -25,7 +26,11 @@ def load_oradio(spec: Union[OradioDescriptor, Dict[str, Any]]) -> FederationEngi
     """Decode a descriptor (or raw dict) into a runnable ``FederationEngine``."""
     desc = spec if isinstance(spec, OradioDescriptor) else OradioDescriptor.from_dict(spec)
     lens = build_lens(desc.lens)
-    eng = FederationEngine(clock=Clock(), evidence=EvidenceService())
+    eng = FederationEngine(
+        clock=Clock(),
+        evidence=EvidenceService(),
+        dipole=DipoleMeter(desc.dipole) if desc.dipole is not None else None,
+    )
 
     for w in desc.worlds:
         organ = build_organ(w.organ, w.name, **w.params)

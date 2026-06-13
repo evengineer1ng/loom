@@ -23,6 +23,7 @@ from oradio_engine.contract import (
     SimulationOrgan,
     TickDelta,
 )
+from oradio_engine.dipole import DipoleMeter
 from oradio_engine.evidence import EvidenceService
 
 
@@ -55,6 +56,7 @@ class FederationEngine:
     ripple: Optional[RipplePolicy] = None  # default OFF (strict isolation) per owner #4
     evidence: Optional[EvidenceService] = None  # attach to grade organs' predictions
     bindings: List[Binding] = field(default_factory=list)  # declared telemetry->world->effector routes
+    dipole: Optional[DipoleMeter] = None
 
     def register(self, organ: SimulationOrgan) -> None:
         name = organ.identity().name
@@ -84,15 +86,15 @@ class FederationEngine:
         # drives worlds; world actions drive effectors). Lands on the next step — no within-step
         # ordering games — so the eyes->brain->hands loop runs one stage per tick.
         for binding in self.bindings:
-            target = self.organs.get(binding.target)
-            if target is None:
+            target_organ = self.organs.get(binding.target)
+            if target_organ is None:
                 continue
             for cand in produced:
                 if cand.source != binding.source:
                     continue
                 event = binding.transform(cand)
                 if event is not None:
-                    target.apply_input(event)
+                    target_organ.apply_input(event)
 
         # Cross-organ ripple (gated). Applied after all organs advanced, so a step's
         # ripples land on the *next* step — no within-step ordering games.
@@ -104,6 +106,12 @@ class FederationEngine:
                     event = self.ripple(name, cand)
                     if event is not None:
                         organ.apply_input(event)
+
+        if self.dipole is not None:
+            reading = self.dipole.measure(target, produced)
+            flip = self.dipole.flip_candidate(reading)
+            if flip is not None:
+                produced.append(flip)
 
         self.bus.extend(produced)
         return produced
@@ -117,6 +125,12 @@ class FederationEngine:
         """Hot-layer snapshot of every organ — what the voice/visuals read."""
 
         return {name: organ.read_truth() for name, organ in self.organs.items()}
+
+    @property
+    def dipole_history(self) -> List[dict]:
+        if self.dipole is None:
+            return []
+        return [reading.as_dict() for reading in self.dipole.history]
 
     @property
     def is_fully_deterministic(self) -> bool:

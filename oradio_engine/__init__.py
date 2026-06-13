@@ -21,6 +21,7 @@ from oradio_engine.contract import (
 )
 from oradio_engine.club import Club, ClubReport
 from oradio_engine.descriptor import OradioDescriptor
+from oradio_engine.dipole import DipoleDecl, DipoleMeter, DipoleReading, PoleMatcher
 from oradio_engine.evidence import EvidenceService, Prediction, normalize_prediction
 from oradio_engine.federation import Clock, FederationEngine
 from oradio_engine.index import Address, Index, funnel, gate, lineage
@@ -35,6 +36,10 @@ __all__ = [
     "SimulationOrgan",
     "TickDelta",
     "normalize_event",
+    "PoleMatcher",
+    "DipoleDecl",
+    "DipoleReading",
+    "DipoleMeter",
     "Clock",
     "FederationEngine",
     "EvidenceService",
