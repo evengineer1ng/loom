@@ -27,6 +27,7 @@ import yaml
 import provisioning
 from oradio_engine.club import Club, DEFAULT_THEME, DEFAULT_THEME_PACKS
 from oradio_engine.registry import SOURCE_KINDS, SOURCE_META
+from oradio_engine.visual_thumbnail import write_visual_thumbnail
 
 
 # loom_studio.py lives in loom/; the descriptor player (loom_player_ui.py) lives at
@@ -104,6 +105,20 @@ SIGNAL_LIBRARY = {
 SIGNAL_OPTIONS = [(key, meta["label"]) for key, meta in SIGNAL_LIBRARY.items() if key in SOURCE_KINDS]
 
 VOICE_PROVIDERS = ["none", "kokoro", "piper", "elevenlabs", "google", "azure"]
+VISUAL_FAMILY_OPTIONS = [
+    ("color_drift", "Color drift"),
+    ("breath", "Breath"),
+    ("particles", "Particles"),
+    ("ripples", "Ripples"),
+    ("bloom", "Bloom"),
+    ("scanlines", "Scanlines"),
+    ("veil", "Veil"),
+    ("orbitals", "Orbitals"),
+    ("glitch", "Glitch"),
+    ("embers", "Embers"),
+    ("grain", "Grain"),
+    ("prisms", "Prisms"),
+]
 
 # Q1 idea knobs. time_period is a free string on CreationRequest; these are convenient
 # presets. genres/tones are multiselect -> genre_mix / tone_mix weighted dicts.
@@ -267,6 +282,7 @@ class LoomFormState:
     atl_db_path: str = ""
     transient_format: str = "Bulletin"
     transient_template_path: str = ""
+    visual_families: List[str] = field(default_factory=lambda: [key for key, _label in VISUAL_FAMILY_OPTIONS])
 
 
 def station_id_from_text(raw: str) -> str:
@@ -329,9 +345,34 @@ def signal_target_from_state(state: LoomFormState, kind: str) -> str:
     return ""
 
 
+def build_visual_descriptor(state: LoomFormState, station_id: str) -> Dict[str, Any]:
+    if state.loop_mode == "custom" and state.loop_path.strip():
+        base = {
+            "mode": "media",
+            "theme": state.builtin_theme or DEFAULT_THEME,
+            "path": state.loop_path.strip(),
+        }
+    else:
+        base = {
+            "mode": "builtin",
+            "theme": state.builtin_theme or DEFAULT_THEME,
+            "path": "",
+        }
+    return {
+        "base": base,
+        "tape": {
+            "seed": f"{station_id}:{int(state.seed)}",
+            "accumulation": "causal",
+            "families": state.visual_families or [key for key, _label in VISUAL_FAMILY_OPTIONS],
+        },
+        "thumbnail": {"mode": "sidecar_png"},
+    }
+
+
 def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
+    station_id = station_id_from_text(state.name)
     descriptor: Dict[str, Any] = {
-        "oradio": station_id_from_text(state.name),
+        "oradio": station_id,
         "lens": "identity",
         "surfaces": ["ribbon"],
         "club": [],
@@ -340,7 +381,7 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
     if state.world_kind != "none":
         world: Dict[str, Any] = {
             "organ": state.world_kind,
-            "name": station_id_from_text(state.name),
+            "name": station_id,
             "seed": int(state.seed),
         }
         if state.world_kind == "forkuniverse":
@@ -414,6 +455,7 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
 
     theme_value = state.builtin_theme if state.loop_mode == "builtin" else state.loop_path.strip()
     descriptor["theme"] = theme_value or DEFAULT_THEME
+    descriptor["visual"] = build_visual_descriptor(state, station_id)
 
     raw_voice = {
         "provider": state.voice_provider,
@@ -476,6 +518,9 @@ class LoomStudioApp:
         self.theme_var = tk.StringVar(value=DEFAULT_THEME)
         self.loop_path_var = tk.StringVar(value="")
         self.voice_provider_var = tk.StringVar(value="kokoro")
+        self.visual_family_vars = {
+            key: tk.BooleanVar(value=True) for key, _label in VISUAL_FAMILY_OPTIONS
+        }
         self.spatial_nodes_var = tk.StringVar(value="front_door, living_room, kitchen")
         self.custom_signal_kind_var = tk.StringVar(value="")
         self.custom_signal_name_var = tk.StringVar(value="")
@@ -640,9 +685,10 @@ class LoomStudioApp:
         self._combo_row(parent, 1, "Theme pack", self.theme_var, list(DEFAULT_THEME_PACKS.keys()))
         self._entry_row(parent, 2, "Loop path", self.loop_path_var, 58)
         tk.Button(parent, text="Browse", command=self._browse_loop, bg=UI["panel_2"], fg=UI["text"], relief="flat").grid(row=2, column=3, padx=6, sticky="w")
-        self._combo_row(parent, 3, "Voice provider", self.voice_provider_var, VOICE_PROVIDERS)
-        tk.Label(parent, text="Voice assignments (one per line, `role=value`)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 4))
-        self.voice_text.grid(row=5, column=0, columnspan=4, sticky="ew")
+        self._checkbox_row(parent, 3, "Tape layers", self.visual_family_vars)
+        self._combo_row(parent, 4, "Voice provider", self.voice_provider_var, VOICE_PROVIDERS)
+        tk.Label(parent, text="Voice assignments (one per line, `role=value`)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=5, column=0, columnspan=4, sticky="w", pady=(8, 4))
+        self.voice_text.grid(row=6, column=0, columnspan=4, sticky="ew")
 
     def _build_question_four(self, parent: tk.Widget) -> None:
         tk.Checkbutton(
@@ -727,12 +773,17 @@ class LoomStudioApp:
         path = filedialog.askopenfilename(
             parent=self.root,
             title="Choose organism loop/media",
-            filetypes=[("Media", "*.gif *.png *.jpg *.jpeg *.mp4 *.mov *.webm"), ("All files", "*.*")],
+            filetypes=[("Media", "*.gif *.png *.jpg *.jpeg *.bmp *.webp *.mp4 *.mov *.avi *.mkv *.webm *.ogv"), ("All files", "*.*")],
         )
         if path:
             self.loop_path_var.set(path)
             self.loop_mode_var.set("custom")
             self.refresh_preview()
+
+    def _write_thumbnail_for_descriptor(self, descriptor: Dict[str, Any], path: Path) -> Path:
+        from oradio_engine.visual_tape import VisualTapeLog
+
+        return write_visual_thumbnail(descriptor, path, VisualTapeLog(), tick=0)
 
     def _refresh_signal_catalog_state(self) -> None:
         self.signal_catalog = signal_catalog()
@@ -816,6 +867,7 @@ class LoomStudioApp:
             custom_signal_params_text=self.custom_signal_params_text.get("1.0", "end").strip(),
             transient_format=self.transient_format_var.get().strip() or "Bulletin",
             transient_template_path=self.transient_template_path_var.get().strip(),
+            visual_families=[key for key, var in self.visual_family_vars.items() if var.get()],
         )
 
     def refresh_preview(self, *_args: Any) -> None:
@@ -849,9 +901,10 @@ class LoomStudioApp:
             return
         path = Path(target)
         path.write_text(yaml.safe_dump(descriptor, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        thumb = self._write_thumbnail_for_descriptor(descriptor, path)
         self.last_export_path = path
-        self.status_var.set(f"Exported {path.name}")
-        messagebox.showinfo("Export .oradio", f"Exported:\n{path}", parent=self.root)
+        self.status_var.set(f"Exported {path.name} and {thumb.name}")
+        messagebox.showinfo("Export .oradio", f"Exported:\n{path}\n\nThumbnail:\n{thumb}", parent=self.root)
 
     def open_in_player(self) -> None:
         if self.last_export_path is None or not self.last_export_path.exists():
@@ -863,6 +916,7 @@ class LoomStudioApp:
             EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
             self.last_export_path = EXPORTS_DIR / f"{station_id_from_text(self.name_var.get())}.oradio"
             self.last_export_path.write_text(yaml.safe_dump(descriptor, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            self._write_thumbnail_for_descriptor(descriptor, self.last_export_path)
         self.status_var.set(f"Opening {self.last_export_path.name} in the Loom player")
         subprocess.Popen([sys.executable, str(ROOT_DIR / "oradio_player.py"), str(self.last_export_path)], cwd=str(ROOT_DIR))
 

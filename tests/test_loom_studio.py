@@ -42,6 +42,9 @@ def test_build_loom_descriptor_creates_voice_binding_for_spatial_signal():
     descriptor = build_loom_descriptor(_state())
     assert descriptor["oradio"] == "my_loom"
     assert descriptor["theme"] == "ribbon"
+    assert descriptor["visual"]["base"]["mode"] == "builtin"
+    assert descriptor["visual"]["tape"]["accumulation"] == "causal"
+    assert len(descriptor["visual"]["tape"]["families"]) >= 8
     assert {"kind": "voice", "name": "loom_voice"} in descriptor["effectors"]
     assert any(binding["transform"] == "presence_to_speech" for binding in descriptor["bindings"])
     assert "voice" in descriptor["surfaces"]
@@ -148,6 +151,18 @@ def test_build_loom_descriptor_can_inline_uploaded_transient_template(tmp_path):
     )
     transient = descriptor["transient_surfaces"][0]
     assert transient["body_template"].startswith("CASE:")
+
+
+def test_build_loom_descriptor_authors_custom_media_visual_base():
+    descriptor = build_loom_descriptor(
+        _state(
+            loop_mode="custom",
+            loop_path="C:/loops/organism.mp4",
+        )
+    )
+    assert descriptor["theme"] == "C:/loops/organism.mp4"
+    assert descriptor["visual"]["base"]["mode"] == "media"
+    assert descriptor["visual"]["base"]["path"] == "C:/loops/organism.mp4"
 
 
 def _forkuniverse_state(name, premise, genres):

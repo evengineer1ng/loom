@@ -20,10 +20,22 @@ from tkinter import messagebox
 from typing import Any, Dict, List, Optional
 
 import yaml
+from PIL import ImageTk
 
 import provisioning
-from oradio_engine import Club, NormalizedCandidate, open_oradio
-from oradio_engine.club import DEFAULT_THEME, DEFAULT_THEME_PACKS
+from oradio_engine import (
+    Club,
+    NormalizedCandidate,
+    VideoLoop,
+    VisualTapeLog,
+    candidate_to_visual_events,
+    descriptor_visual_families,
+    open_oradio,
+    render_visual_frame,
+    thumbnail_sidecar_path,
+    write_visual_thumbnail,
+)
+from oradio_engine.visual_thumbnail import resolve_media_path, visual_config
 from loom_narration import Narrator
 from voice_provider import get_voice_provider
 
@@ -60,31 +72,6 @@ def read_descriptor(path: Path) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Descriptor must decode to an object.")
     return data
-
-
-def resolve_media_path(descriptor_path: Path, ref: str) -> Optional[Path]:
-    if not ref:
-        return None
-    raw = Path(ref)
-    if raw.is_absolute() and raw.exists():
-        return raw
-    candidate = descriptor_path.parent / ref
-    if candidate.exists():
-        return candidate
-    cwd_candidate = Path.cwd() / ref
-    if cwd_candidate.exists():
-        return cwd_candidate
-    return None
-
-
-def theme_palette(theme_name: str) -> Dict[str, str]:
-    palettes = {
-        "ribbon": {"bg": "#0b1020", "accent": "#66d2e7", "secondary": "#9f86ff"},
-        "smoke": {"bg": "#101010", "accent": "#d4d7dd", "secondary": "#6c757d"},
-        "aurora": {"bg": "#08141f", "accent": "#72f1b8", "secondary": "#7aa2f7"},
-        "ember": {"bg": "#180d08", "accent": "#ff8c42", "secondary": "#ff3d68"},
-    }
-    return palettes.get(theme_name, palettes[DEFAULT_THEME])
 
 
 def format_candidate_line(cand: NormalizedCandidate) -> str:
@@ -205,13 +192,24 @@ class LoomPlayerApp:
         if self.voice.required and not self.voice.ready:
             detail = self.voice.last_error or "Voice playback is not ready for this descriptor."
             raise RuntimeError(detail)
+        self.visual_tape = VisualTapeLog()
+        self.visual_families = descriptor_visual_families(self.descriptor)
+        self.visual_snapshot = None
+        self.stage_image = None
+        self.media_loop = self._build_media_loop()
         self.playing = False
         self.tick_ms = 1400
         self.loop_after_id: Optional[str] = None
+        self.media_after_id: Optional[str] = None
+        self.media_refresh_ms = 80
+        self.thumbnail_refresh_ms = 3500
+        self.last_thumbnail_refresh_at = 0.0
         self.last_spoken_post_id = ""
         self.beats: List[NormalizedCandidate] = []
         self.events: "queue.Queue[str]" = queue.Queue()
         self.ribbon_phase = 0.0
+        self.playback_elapsed_before_pause = 0.0
+        self.play_started_at: Optional[float] = None
 
         self.root = tk.Tk()
         self.root.title(f"The Loom Player - {self.descriptor.get('oradio', descriptor_path.stem)}")
@@ -222,10 +220,30 @@ class LoomPlayerApp:
         self.subtitle_var = tk.StringVar(value="Press Play to observe the world.")
         self.club_var = tk.StringVar(value=self._club_summary())
         self.voice_var = tk.StringVar(value=self._voice_summary())
+        self.visual_var = tk.StringVar(value=self._visual_summary())
         self.now_var = tk.StringVar(value="")
 
         self._build()
+        self._refresh_thumbnail()
         self.root.protocol("WM_DELETE_WINDOW", self._close)
+
+    def _build_media_loop(self) -> Optional[VideoLoop]:
+        config = visual_config(self.descriptor)
+        if config.get("mode") != "media":
+            return None
+        path = resolve_media_path(self.descriptor_path, str(config.get("path") or ""))
+        if path is None:
+            return None
+        if path.suffix.lower() not in {".mp4", ".mov", ".avi", ".mkv", ".webm", ".ogv", ".ogg"}:
+            return None
+        loop = VideoLoop(path)
+        return loop if loop.ok else None
+
+    def _media_time(self) -> float:
+        elapsed = self.playback_elapsed_before_pause
+        if self.playing and self.play_started_at is not None:
+            elapsed += max(0.0, time.perf_counter() - self.play_started_at)
+        return elapsed
 
     def _build(self) -> None:
         top = tk.Frame(self.root, bg=UI["bg"])
@@ -270,6 +288,7 @@ class LoomPlayerApp:
 
         self._side_card(side, "Club", self.club_var)
         self._side_card(side, "Voices", self.voice_var)
+        self._side_card(side, "Tape", self.visual_var)
         self._side_card(side, "Latest Beats", None)
         self.beats_list = tk.Listbox(side, bg=UI["panel"], fg=UI["text"], relief="flat", borderwidth=0, highlightthickness=0, font=FONT_SMALL)
         self.beats_list.pack(fill="both", expand=True)
@@ -302,49 +321,58 @@ class LoomPlayerApp:
             return f"{self.voice.provider_name} unavailable\n{self.voice.last_error}"
         return f"{self.voice.provider_name} pending"
 
+    def _visual_summary(self) -> str:
+        snapshot = self.visual_snapshot
+        if snapshot is None:
+            sidecar = thumbnail_sidecar_path(self.descriptor_path)
+            return f"families: {', '.join(self.visual_families)}\nentries: 0\nthumbnail: {sidecar.name}"
+        lineage = " | ".join(" > ".join(item[-2:]) for item in snapshot.lineage[-2:]) or "seed only"
+        return (
+            f"families: {', '.join(self.visual_families)}\n"
+            f"entries: {snapshot.entries}\n"
+            f"energy: {snapshot.total_energy:.2f}\n"
+            f"lineage: {lineage}"
+        )
+
+    def _refresh_thumbnail(self) -> None:
+        try:
+            write_visual_thumbnail(
+                self.descriptor,
+                self.descriptor_path,
+                self.visual_tape,
+                tick=self.engine.clock.tick,
+                media_time=self._media_time(),
+            )
+            self.last_thumbnail_refresh_at = time.perf_counter()
+        except Exception:
+            return
+
     def draw_stage(self) -> None:
         width = max(self.stage.winfo_width(), 640)
         height = max(self.stage.winfo_height(), 360)
         self.stage.delete("all")
-
-        theme_name = str(self.descriptor.get("theme") or DEFAULT_THEME)
-        palette = theme_palette(theme_name if theme_name in DEFAULT_THEME_PACKS else DEFAULT_THEME)
-        self.stage.create_rectangle(0, 0, width, height, fill=palette["bg"], outline="")
-
-        loop_ref = str(self.descriptor.get("theme") or "")
-        media = resolve_media_path(self.descriptor_path, loop_ref)
-        if media:
-            self.stage.create_text(
-                width // 2,
-                height // 2 - 60,
-                text=f"Organism loop\n{media.name}",
-                fill=UI["muted"],
-                font=FONT_H2,
-            )
-        else:
-            self.stage.create_text(
-                width // 2,
-                height // 2 - 60,
-                text=f"{theme_name} organism",
-                fill=UI["muted"],
-                font=FONT_H2,
-            )
-
-        points: List[float] = []
-        for x in range(0, width + 20, 20):
-            y = height * 0.58 + 50 * __import__("math").sin((x / 80.0) + self.ribbon_phase)
-            points.extend([x, y])
-        self.stage.create_line(*points, fill=palette["accent"], width=16, smooth=True, splinesteps=24)
-
-        points_two: List[float] = []
-        for x in range(0, width + 20, 20):
-            y = height * 0.66 + 34 * __import__("math").sin((x / 110.0) + self.ribbon_phase * 1.4 + 1.3)
-            points_two.extend([x, y])
-        self.stage.create_line(*points_two, fill=palette["secondary"], width=10, smooth=True, splinesteps=24)
-
-        caption = self.descriptor.get("loom_notes", {}).get("premise") if isinstance(self.descriptor.get("loom_notes"), dict) else ""
-        if caption:
-            self.stage.create_text(width // 2, height - 50, text=caption, fill=UI["text"], font=FONT_BODY, width=width - 120)
+        image, snapshot, meta = render_visual_frame(
+            self.descriptor,
+            self.descriptor_path,
+            self.visual_tape,
+            tick=self.engine.clock.tick,
+            size=(width, height),
+            phase=self.ribbon_phase,
+            media_time=self._media_time(),
+            video_loop=self.media_loop,
+        )
+        self.visual_snapshot = snapshot
+        self.visual_var.set(self._visual_summary())
+        self.stage_image = ImageTk.PhotoImage(image)
+        self.stage.create_image(0, 0, anchor="nw", image=self.stage_image)
+        self.stage.create_text(
+            20,
+            18,
+            anchor="nw",
+            text=f"{meta['base']}  |  tick {self.engine.clock.tick}",
+            fill=UI["muted"],
+            font=FONT_SMALL,
+        )
 
     def show_club_dialog(self) -> None:
         top = tk.Toplevel(self.root)
@@ -371,15 +399,23 @@ class LoomPlayerApp:
         if self.playing:
             return
         self.playing = True
+        self.play_started_at = time.perf_counter()
         self.status_var.set("Playing")
         self.now_var.set("Broadcasting")
+        self._media_loop()
         self._loop()
 
     def pause(self) -> None:
+        if self.playing and self.play_started_at is not None:
+            self.playback_elapsed_before_pause += max(0.0, time.perf_counter() - self.play_started_at)
         self.playing = False
+        self.play_started_at = None
         if self.loop_after_id:
             self.root.after_cancel(self.loop_after_id)
             self.loop_after_id = None
+        if self.media_after_id:
+            self.root.after_cancel(self.media_after_id)
+            self.media_after_id = None
         self.status_var.set("Paused")
         self.now_var.set("Paused")
 
@@ -394,29 +430,49 @@ class LoomPlayerApp:
         if self.open_result.engine is None:
             raise RuntimeError("Could not rewind; engine failed to rebuild.")
         self.engine = self.open_result.engine
+        self.playback_elapsed_before_pause = 0.0
+        self.play_started_at = None
+        self.visual_tape.clear()
+        self.visual_snapshot = None
         self.beats.clear()
         self.triggered_transients.clear()
         self.beats_list.delete(0, "end")
         self.subtitle_var.set("Rewound to the beginning.")
+        self._refresh_thumbnail()
         self.draw_stage()
 
     def restart(self) -> None:
         self.rewind()
         self.play()
 
+    def _media_loop(self) -> None:
+        if not self.playing:
+            return
+        self.ribbon_phase += 0.045
+        self.draw_stage()
+        now = time.perf_counter()
+        if (now - self.last_thumbnail_refresh_at) * 1000.0 >= self.thumbnail_refresh_ms:
+            self._refresh_thumbnail()
+        self.media_after_id = self.root.after(self.media_refresh_ms, self._media_loop)
+
     def _loop(self) -> None:
         if not self.playing:
             return
         produced = self.engine.tick(1)
-        self.ribbon_phase += 0.35
         if produced:
             self._ingest_candidates(produced)
-        self.draw_stage()
         self.loop_after_id = self.root.after(self.tick_ms, self._loop)
 
     def _ingest_candidates(self, produced: List[NormalizedCandidate]) -> None:
         for cand in produced:
             self.beats.append(cand)
+            self.visual_tape.extend(
+                candidate_to_visual_events(
+                    cand,
+                    self.engine.clock.tick,
+                    families=self.visual_families,
+                )
+            )
             self.beats_list.insert("end", f"[{cand.priority:.2f}] {cand.source}: {cand.title}")
             if self.beats_list.size() > 40:
                 self.beats_list.delete(0)
@@ -433,6 +489,8 @@ class LoomPlayerApp:
             self.last_spoken_post_id = top.post_id
             self.voice.speak_async(line)
             self.voice_var.set(self._voice_summary())
+
+        self._refresh_thumbnail()
 
         for rule in self.transient_rules:
             key = f"{rule.name}:{top.post_id}"
@@ -454,6 +512,9 @@ class LoomPlayerApp:
 
     def _close(self) -> None:
         self.pause()
+        self._refresh_thumbnail()
+        if self.media_loop is not None:
+            self.media_loop.close()
         self.root.destroy()
 
     def run(self) -> None:

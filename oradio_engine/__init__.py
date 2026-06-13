@@ -28,6 +28,17 @@ from oradio_engine.index import Address, Index, funnel, gate, lineage
 from oradio_engine.lens import Lens, LensedOrgan, build_lens
 from oradio_engine.live import IntakeTape, LiveFeedOrgan, LiveSource
 from oradio_engine.loader import OpenResult, load_oradio, load_oradio_file, open_oradio
+from oradio_engine.visual_index import VisualIndex, visual_seed
+from oradio_engine.visual_tape import (
+    DEFAULT_VISUAL_FAMILIES,
+    VisualTapeEvent,
+    VisualTapeLog,
+    VisualTapeSnapshot,
+    build_visual_snapshot,
+    candidate_to_visual_events,
+    descriptor_visual_families,
+)
+from oradio_engine.visual_thumbnail import VideoLoop, render_visual_frame, thumbnail_sidecar_path, write_visual_thumbnail
 
 __all__ = [
     "Determinism",
@@ -63,4 +74,17 @@ __all__ = [
     "gate",
     "funnel",
     "lineage",
+    "VisualIndex",
+    "visual_seed",
+    "DEFAULT_VISUAL_FAMILIES",
+    "VisualTapeEvent",
+    "VisualTapeLog",
+    "VisualTapeSnapshot",
+    "build_visual_snapshot",
+    "candidate_to_visual_events",
+    "descriptor_visual_families",
+    "render_visual_frame",
+    "thumbnail_sidecar_path",
+    "write_visual_thumbnail",
+    "VideoLoop",
 ]
