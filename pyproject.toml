@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oracle-radio"
+version = "0.1.0"
+description = "Oracle Radio — the Loom (authoring), the .oradio format, and the Club model. A domain-blind simulation codec: an .oradio is a KB declaration; the engine decodes it; the club resolves heavy capability at the endpoint."
+requires-python = ">=3.11"
+readme = "README.md"
+# The engine CORE is pure stdlib. PyYAML is the only hard dep, used solely to
+# parse .oradio descriptor files in oradio_engine/loader.py.
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+# Heavy capability lives at the ENDPOINT, not in the engine. These extras back
+# the player/runtime modules, never the deterministic decode/federate loop.
+runtime = ["numpy", "requests", "sounddevice", "soundfile"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+oradio = "oradio_engine.__main__:main"
+
+[tool.setuptools]
+# Flat layout: the engine package + the top-level Oracle Radio modules.
+packages = ["oradio_engine", "oradio_engine.shims"]
+py-modules = [
+    "oradio_player", "oradio_player_ui", "oradio_resolver", "oradio_runtime",
+    "oradio_validate", "export_oradio", "antenna_resolver", "broadcast_grammar",
+    "club_gate", "ribbon_bridge", "signal_heat", "shim_generator",
+    "provisioning", "radio_os_theme", "show_the_machine", "radio_os_studio",
+    "sfx_sourcing",
+]
