@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-import broadcast_grammar as bg
-import radio_os_studio as studio
+from loom import broadcast_grammar as bg
+from loom import radio_os_studio as studio
 
 # These exercise the export-to-Radio-OS seam: the studio generating a Radio OS
 # meta-plugin into plugins/meta/generated.py. They run wherever that station tree

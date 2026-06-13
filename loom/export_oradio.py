@@ -31,7 +31,7 @@ BASE = Path(__file__).resolve().parent
 STATIONS = BASE / "stations"
 EXPORTS = BASE / "exports"
 
-import radio_os_studio as studio  # reuse the Studio's packaging core (no GUI needed to import)
+from loom import radio_os_studio as studio  # reuse the Studio's packaging core (no GUI needed to import)
 import oradio_resolver
 
 COVER_ARCNAME = "cover.jpg"

@@ -7,7 +7,7 @@ import pytest
 import oradio_resolver
 import oradio_player
 import oradio_player_ui
-import radio_os_studio as studio
+from loom import radio_os_studio as studio
 import yaml
 
 # Some contract tests exercise the export-to-Radio-OS seam (feed-plugin discovery,
