@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from oradio_engine import OradioDescriptor, load_oradio, load_oradio_file  # noqa: E402
 
-EXAMPLES = os.path.join(os.path.dirname(__file__), "..", "examples")
+EXAMPLES = os.path.join(os.path.dirname(__file__), "..", "spec", "examples")
 
 
 def test_descriptor_parses_the_owner_approved_shape():

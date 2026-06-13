@@ -175,7 +175,7 @@ Proven (`tests/test_oradio_loader.py`, 7 pass): the descriptor parses; a world i
 declaration; the lens is declared + composable (same world, different read); multi-world `.oradio`;
 **the spatial array emerges with no hardware** (`simulated_spatial_array` telemetry); the FTB flood
 is tamed by declaration; and the example `.oradio` files load + run. Artifacts:
-`examples/motorsport-ladder.oradio`, `examples/home-region.oradio`.
+`spec/examples/motorsport-ladder.oradio`, `spec/examples/home-region.oradio`.
 
 ## 11. The binding layer — telemetry drives worlds; world actions drive effectors
 
@@ -193,9 +193,9 @@ Transforms and effectors are declared by kind, so routing lives in the `.oradio`
 `bindings:` sections), not Python.
 
 **Both flagships are the SAME machinery** (`tests/test_binding.py`, 5 pass):
-- **Spatial house** — `examples/home-region.oradio`: presence at a node → the house *speaks*
+- **Spatial house** — `spec/examples/home-region.oradio`: presence at a node → the house *speaks*
   (`array --presence_to_speech--> voice`). Proven: the house reacts to each room you enter.
-- **Pokémon Scarlet via VIDEO CAPTURE** — `examples/pokemon-scarlet.oradio`:
+- **Pokémon Scarlet via VIDEO CAPTURE** — `spec/examples/pokemon-scarlet.oradio`:
   `capture (eyes) --frame_to_observation--> navigator (brain) --action_to_button--> gamepad (hands)`.
   Perception is *vision*, not memory reads, so the eyes are a **transform** (the LLM-as-eyes seam —
   swap `frame_to_observation` for an `llm_perception` transform on real frames). The navigator is a
