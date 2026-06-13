@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -87,6 +87,14 @@ class LoomFormState:
     transient_title: str
     transient_min_priority: float
     transient_body_template: str
+    # Idea-carrying knobs for the forkuniverse creation request. `time_period` is a
+    # REQUIRED field on CreationRequest (its absence crashed the headline path on load);
+    # the rest are optional but are where the premise gains real specificity.
+    time_period: str = "present_day"
+    genres: List[str] = field(default_factory=list)
+    tones: List[str] = field(default_factory=list)
+    location_flavor: str = ""
+    starting_context: str = ""
 
 
 def station_id_from_text(raw: str) -> str:
@@ -131,10 +139,12 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
             "seed": int(state.seed),
         }
         if state.world_kind == "forkuniverse":
-            world["creation"] = {
+            creation: Dict[str, Any] = {
                 "universe_title": state.name.strip() or "Untitled Loom",
                 "premise": state.premise.strip() or "A world expressed through a Loom artifact.",
                 "setting_kind": "custom",
+                # Required by CreationRequest — omitting it crashed the headline path on load.
+                "time_period": state.time_period.strip() or "present_day",
                 "story_mode": "continuous",
                 "world_scale": "district",
                 "starting_population": 24,
@@ -142,6 +152,17 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
                 "custom_seed": str(state.seed),
                 "ontology_domains": ["identity", "pressure", "signal"],
             }
+            # Optional idea-carrying knobs: only send them when the author supplied them,
+            # so an empty form still produces a clean, minimal creation request.
+            if state.genres:
+                creation["genre_mix"] = {genre: 1.0 for genre in state.genres}
+            if state.tones:
+                creation["tone_mix"] = {tone: 1.0 for tone in state.tones}
+            if state.location_flavor.strip():
+                creation["location_flavor"] = state.location_flavor.strip()
+            if state.starting_context.strip():
+                creation["starting_context"] = state.starting_context.strip()
+            world["creation"] = creation
         descriptor["world"] = world
 
     telemetry: List[Dict[str, Any]] = []
