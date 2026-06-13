@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -241,6 +242,14 @@ def launch_oradio(
     extract_dir: Optional[Path] = None,
     gui_gate: bool = False,
 ) -> int:
+    # A descriptor-style .oradio (the Loom authoring path) is a plain YAML file, not a
+    # zip package. Route those straight to the descriptor player instead of the
+    # extract-and-launch kernel path, which only understands packaged stations.
+    if package_path.is_file() and not zipfile.is_zipfile(package_path):
+        import loom_player_ui
+
+        return loom_player_ui.main([str(package_path)])
+
     if not RUNTIME_PATH.exists():
         print(f"Playback kernel not found: {RUNTIME_PATH}", file=sys.stderr)
         return 2
