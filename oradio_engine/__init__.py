@@ -37,6 +37,7 @@ from oradio_engine.visual_tape import (
     build_visual_snapshot,
     candidate_to_visual_events,
     descriptor_visual_families,
+    truth_to_visual_events,
 )
 from oradio_engine.visual_thumbnail import VideoLoop, render_visual_frame, thumbnail_sidecar_path, write_visual_thumbnail
 
@@ -83,6 +84,7 @@ __all__ = [
     "build_visual_snapshot",
     "candidate_to_visual_events",
     "descriptor_visual_families",
+    "truth_to_visual_events",
     "render_visual_frame",
     "thumbnail_sidecar_path",
     "write_visual_thumbnail",

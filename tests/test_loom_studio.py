@@ -44,7 +44,7 @@ def test_build_loom_descriptor_creates_voice_binding_for_spatial_signal():
     assert descriptor["theme"] == "ribbon"
     assert descriptor["visual"]["base"]["mode"] == "builtin"
     assert descriptor["visual"]["tape"]["accumulation"] == "causal"
-    assert len(descriptor["visual"]["tape"]["families"]) >= 8
+    assert len(descriptor["visual"]["tape"]["families"]) >= 12
     assert {"kind": "voice", "name": "loom_voice"} in descriptor["effectors"]
     assert any(binding["transform"] == "presence_to_speech" for binding in descriptor["bindings"])
     assert "voice" in descriptor["surfaces"]

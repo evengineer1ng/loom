@@ -5,10 +5,13 @@ import pytest
 from oradio_engine.contract import NormalizedCandidate
 from oradio_engine.visual_index import VisualIndex, visual_seed
 from oradio_engine.visual_tape import (
+    DEFAULT_VISUAL_FAMILIES,
+    VISUAL_FAMILY_RULES,
     VisualTapeLog,
     build_visual_snapshot,
     candidate_to_visual_events,
     descriptor_visual_families,
+    truth_to_visual_events,
 )
 from oradio_engine.visual_thumbnail import render_visual_frame, thumbnail_sidecar_path, write_visual_thumbnail
 
@@ -57,6 +60,53 @@ def test_visual_snapshot_is_deterministic_for_same_seed_and_tape():
     assert a.hue_shift == b.hue_shift
     assert a.particles == b.particles
     assert a.ripples == b.ripples
+
+
+def test_every_default_family_has_a_real_rule():
+    assert set(DEFAULT_VISUAL_FAMILIES) <= set(VISUAL_FAMILY_RULES)
+    assert len(DEFAULT_VISUAL_FAMILIES) >= 12
+    persistences = {VISUAL_FAMILY_RULES[name].persistence for name in DEFAULT_VISUAL_FAMILIES}
+    energy_scales = {VISUAL_FAMILY_RULES[name].energy_scale for name in DEFAULT_VISUAL_FAMILIES}
+    assert len(persistences) > 4
+    assert len(energy_scales) > 4
+
+
+def test_family_events_carry_family_specific_causal_payload():
+    candidate = _candidate()
+    events = candidate_to_visual_events(candidate, 5, families=DEFAULT_VISUAL_FAMILIES)
+    assert {event.family for event in events} == set(DEFAULT_VISUAL_FAMILIES)
+    bias_values = {round(float(event.payload["bias"]), 5) for event in events}
+    spread_values = {round(float(event.payload["spread"]), 5) for event in events}
+    assert len(bias_values) > 4
+    assert len(spread_values) > 4
+
+
+def test_truth_events_map_different_truth_fields_to_different_families():
+    previous = {
+        "oracle": {"tick": 9, "legitimacy": 42.0, "corruption": 28.0, "public_faith": 50.0, "decrees": 2, "events": 8},
+        "harbor": {"tick": 9, "active_threads": 3},
+        "house": {"tick": 9, "location": "front_door"},
+        "league": {"tick": 9, "mode": "live", "recorded": 11, "cursors": {"a": 1}},
+    }
+    current = {
+        "oracle": {"tick": 10, "legitimacy": 36.0, "corruption": 63.0, "public_faith": 44.0, "decrees": 5, "events": 14},
+        "harbor": {"tick": 10, "active_threads": 7},
+        "house": {"tick": 10, "location": "kitchen"},
+        "league": {"tick": 10, "mode": "replay", "recorded": 19, "cursors": {"a": 1, "b": 2, "c": 3}},
+    }
+    events = truth_to_visual_events(current, previous, 10, families=DEFAULT_VISUAL_FAMILIES)
+    by_family = {event.family: event for event in events}
+
+    assert "glitch" in by_family
+    assert by_family["glitch"].payload["field"] == "rupture"
+    assert "veil" in by_family
+    assert by_family["veil"].payload["field"] == "uncertainty"
+    assert "orbitals" in by_family
+    assert by_family["orbitals"].payload["field"] == "cycles"
+    assert "scanlines" in by_family
+    assert by_family["scanlines"].payload["field"] == "mediation"
+    assert "ripples" in by_family
+    assert by_family["ripples"].payload["field"] == "crossings"
 
 
 def test_visual_tape_compounds_as_entries_accumulate():

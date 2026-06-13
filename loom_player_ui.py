@@ -33,6 +33,7 @@ from oradio_engine import (
     open_oradio,
     render_visual_frame,
     thumbnail_sidecar_path,
+    truth_to_visual_events,
     write_visual_thumbnail,
 )
 from oradio_engine.visual_thumbnail import resolve_media_path, visual_config
@@ -197,6 +198,7 @@ class LoomPlayerApp:
         self.visual_snapshot = None
         self.stage_image = None
         self.media_loop = self._build_media_loop()
+        self.previous_truth = self.engine.truth()
         self.playing = False
         self.tick_ms = 1400
         self.loop_after_id: Optional[str] = None
@@ -434,6 +436,7 @@ class LoomPlayerApp:
         self.play_started_at = None
         self.visual_tape.clear()
         self.visual_snapshot = None
+        self.previous_truth = self.engine.truth()
         self.beats.clear()
         self.triggered_transients.clear()
         self.beats_list.delete(0, "end")
@@ -459,6 +462,16 @@ class LoomPlayerApp:
         if not self.playing:
             return
         produced = self.engine.tick(1)
+        current_truth = self.engine.truth()
+        self.visual_tape.extend(
+            truth_to_visual_events(
+                current_truth,
+                self.previous_truth,
+                self.engine.clock.tick,
+                families=self.visual_families,
+            )
+        )
+        self.previous_truth = current_truth
         if produced:
             self._ingest_candidates(produced)
         self.loop_after_id = self.root.after(self.tick_ms, self._loop)
