@@ -18,6 +18,12 @@ import pytest
 # synthetic helpers) resolves regardless of where pytest is invoked from.
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Pre-stocked reference organs live in plugins/organs/. Putting that dir on the path
+# is what the club's bouncer does when it "installs" an organ — so a shim's bare
+# `import oracle_kingdom` resolves to the vendored plugin. Organs not yet vendored
+# there still raise ModuleNotFoundError and skip (see the hook below).
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugins", "organs"))
+
 # Module roots that mean "a real organ plugin isn't installed in this club."
 _ORGAN_MODULES = {"forkuniverse", "neikos", "oracle_kingdom", "plugins", "ftb_game"}
 
