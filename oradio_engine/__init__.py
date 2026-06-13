@@ -39,7 +39,13 @@ from oradio_engine.visual_tape import (
     descriptor_visual_families,
     truth_to_visual_events,
 )
-from oradio_engine.visual_thumbnail import VideoLoop, render_visual_frame, thumbnail_sidecar_path, write_visual_thumbnail
+# NOTE: visual_thumbnail (PIL rasterization) is intentionally NOT imported here.
+# `import oradio_engine` — the .oradio DECODER — must stay importable on stdlib +
+# PyYAML alone. A heavy dep in the core forks the file format (you can version the
+# software, never everyone's .oradio files). Rasterization is an ENDPOINT job:
+# `from oradio_engine.visual_thumbnail import render_visual_frame, ...` when you mean
+# to draw pixels. The deterministic visual *params* (visual_tape/visual_index) stay
+# pure and exported above.
 
 __all__ = [
     "Determinism",
@@ -85,8 +91,4 @@ __all__ = [
     "candidate_to_visual_events",
     "descriptor_visual_families",
     "truth_to_visual_events",
-    "render_visual_frame",
-    "thumbnail_sidecar_path",
-    "write_visual_thumbnail",
-    "VideoLoop",
 ]
