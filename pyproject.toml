@@ -16,6 +16,10 @@ dependencies = ["PyYAML>=6.0"]
 # Heavy capability lives at the ENDPOINT, not in the engine. These extras back
 # the player/runtime modules, never the deterministic decode/federate loop.
 runtime = ["numpy", "requests", "sounddevice", "soundfile"]
+# Deps of the PRE-STOCKED light reference organs (plugins/organs/). forkuniverse
+# needs pydantic + requests; oracle + neikos are stdlib-only. Heavy organs
+# (ftb, atl, moco) are bouncer-installed at the endpoint, not declared here.
+organs = ["pydantic>=2", "requests"]
 dev = ["pytest>=8"]
 
 [project.scripts]

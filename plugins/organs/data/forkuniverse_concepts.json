@@ -1,0 +1,106 @@
+{
+  "schema_version": "forkuniverse.concept_registry.v1",
+  "registry_id": "forkuniverse_core_concepts",
+  "concepts": [
+    {
+      "concept_id": "love",
+      "label": "Love",
+      "category": "relationship_force",
+      "description": "Attachment that increases loyalty, sacrifice, jealousy, and protective behavior.",
+      "affects": ["loyalty", "risk_tolerance", "jealousy", "sacrifice", "attention"],
+      "creates_events": ["confession", "protective_action", "jealous_reaction"],
+      "creates_threads": ["confession", "betrayal", "marriage", "jealousy", "protective_action"],
+      "creates_predictions": ["romantic_union", "betrayal_risk", "sacrifice_event"],
+      "decays_with": ["neglect", "betrayal", "distance"],
+      "intensifies_with": ["shared_danger", "kindness", "proximity"],
+      "resolution_modes": ["union", "confession", "reconciliation"],
+      "failure_modes": ["betrayal", "withdrawal", "obsession"],
+      "radio_surfaces": ["character_thought", "open_thread", "breaking_development"],
+      "default_coefficients": {
+        "thread_heat_bias": 0.2,
+        "prediction_spawn_bias": 0.15
+      },
+      "tags": ["romance", "bond", "jealousy"]
+    },
+    {
+      "concept_id": "debt",
+      "label": "Debt",
+      "category": "obligation",
+      "description": "An obligation force that increases stress, dependency, and desperate decision-making.",
+      "affects": ["stress", "power", "dependency", "risk"],
+      "creates_events": ["repayment_due", "collection_pressure", "favor_called_in"],
+      "creates_threads": ["repayment_deadline", "blackmail", "desperate_choice", "favor_owed"],
+      "creates_predictions": ["default_risk", "payment_success", "coercion_risk"],
+      "decays_with": ["payment", "forgiveness"],
+      "intensifies_with": ["interest", "threats", "public_shame"],
+      "resolution_modes": ["repayment", "forgiveness", "restructuring"],
+      "failure_modes": ["default", "coercion", "asset_loss"],
+      "radio_surfaces": ["institutional_bulletin", "open_thread", "prediction"],
+      "default_coefficients": {
+        "thread_heat_bias": 0.25,
+        "stress_bias": 0.4
+      },
+      "tags": ["money", "obligation", "pressure"]
+    },
+    {
+      "concept_id": "rumor",
+      "label": "Rumor",
+      "category": "memory_force",
+      "description": "Unverified social information that distorts trust, reputation, and collective fear.",
+      "affects": ["trust", "reputation", "fear", "myth_density"],
+      "creates_events": ["whisper_network", "public_denial", "panic_spread"],
+      "creates_threads": ["who_started_it", "cover_up", "false_accusation"],
+      "creates_predictions": ["reputation_collapse", "panic_growth", "truth_reveal"],
+      "decays_with": ["verification", "silence", "distraction"],
+      "intensifies_with": ["ambiguity", "fear", "repetition"],
+      "resolution_modes": ["verification", "exposure", "containment"],
+      "failure_modes": ["panic", "smear_success", "mythologizing"],
+      "radio_surfaces": ["rumor", "historical_summary", "breaking_development"],
+      "default_coefficients": {
+        "surface_bias": 0.35,
+        "myth_bias": 0.2
+      },
+      "tags": ["social", "fear", "reputation"]
+    },
+    {
+      "concept_id": "grief",
+      "label": "Grief",
+      "category": "desire_force",
+      "description": "A destabilizing emotional force produced by death, loss, and irreversible separation.",
+      "affects": ["initiative", "memory_intensity", "risk", "withdrawal"],
+      "creates_events": ["mourning", "withdrawal", "memorial_action"],
+      "creates_threads": ["revenge", "acceptance", "denial", "memorialization"],
+      "creates_predictions": ["withdrawal_risk", "revenge_risk", "bond_shift"],
+      "decays_with": ["time", "ritual", "support"],
+      "intensifies_with": ["reminders", "injustice", "isolation"],
+      "resolution_modes": ["acceptance", "ritual", "new_attachment"],
+      "failure_modes": ["revenge", "collapse", "obsession"],
+      "radio_surfaces": ["character_thought", "recap", "myth_echo"],
+      "default_coefficients": {
+        "memory_bias": 0.3,
+        "thread_heat_bias": 0.15
+      },
+      "tags": ["loss", "mourning", "memory"]
+    },
+    {
+      "concept_id": "ambition",
+      "label": "Ambition",
+      "category": "status_force",
+      "description": "A status-seeking drive that can produce growth, rivalry, betrayal, and overreach.",
+      "affects": ["status_drive", "risk", "work_intensity", "rivalry"],
+      "creates_events": ["promotion_attempt", "challenge", "power_move"],
+      "creates_threads": ["rise_to_power", "career_conflict", "succession_push"],
+      "creates_predictions": ["promotion_success", "betrayal_risk", "burnout_risk"],
+      "decays_with": ["defeat", "satisfaction", "exhaustion"],
+      "intensifies_with": ["recognition", "envy", "scarcity"],
+      "resolution_modes": ["promotion", "resignation", "compromise"],
+      "failure_modes": ["burnout", "humiliation", "betrayal"],
+      "radio_surfaces": ["breaking_development", "prediction", "open_thread"],
+      "default_coefficients": {
+        "thread_heat_bias": 0.3,
+        "prediction_spawn_bias": 0.25
+      },
+      "tags": ["status", "career", "power"]
+    }
+  ]
+}
