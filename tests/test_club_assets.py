@@ -96,6 +96,17 @@ def test_resolver_finds_voice_in_remembered_dir():
         assert results[0]["source"] == "machine-cache"
 
 
+def test_save_and_list_transient_template():
+    with _TempConfig() as root:
+        src = root / "bulletin.txt"
+        src.write_text("CASE: {title}", encoding="utf-8")
+        res = provisioning.save_transient_template(src, alias="case_file")
+        assert res["ok"] is True
+        items = provisioning.list_transient_templates()
+        assert any(item["name"] == "case_file" for item in items)
+        assert provisioning.read_transient_template("case_file").startswith("CASE:")
+
+
 def _run_standalone():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

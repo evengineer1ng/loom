@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
+from oradio_engine.bootstrap import ensure_repo_plugin_paths
+
 # kind -> factory(name, **params) -> SimulationOrgan
 ORGAN_KINDS: Dict[str, Callable[..., Any]] = {}
 SOURCE_KINDS: Dict[str, Callable[..., Any]] = {}
@@ -30,12 +32,14 @@ def register_source(kind: str, factory: Callable[..., Any], *, sensitive: bool =
 
 
 def build_organ(kind: str, name: str, **params: Any) -> Any:
+    ensure_repo_plugin_paths()
     if kind not in ORGAN_KINDS:
         raise KeyError(f"unknown world/organ kind {kind!r}; known: {sorted(ORGAN_KINDS)}")
     return ORGAN_KINDS[kind](name, **params)
 
 
 def build_source(kind: str, name: str, **params: Any) -> Any:
+    ensure_repo_plugin_paths()
     if kind not in SOURCE_KINDS:
         raise KeyError(f"unknown telemetry source kind {kind!r}; known: {sorted(SOURCE_KINDS)}")
     return SOURCE_KINDS[kind](name, **params)

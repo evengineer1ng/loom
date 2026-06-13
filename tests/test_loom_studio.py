@@ -1,4 +1,5 @@
-from loom.loom_studio import LoomFormState, build_loom_descriptor
+import provisioning
+from loom.loom_studio import LoomFormState, build_loom_descriptor, signal_catalog
 
 
 def _state(**overrides):
@@ -22,6 +23,19 @@ def _state(**overrides):
     for key, value in overrides.items():
         setattr(base, key, value)
     return base
+
+
+class _TempConfig:
+    def __init__(self, tmp_path):
+        self._cfg = tmp_path / "config.json"
+        self._orig = provisioning.global_config_path
+
+    def __enter__(self):
+        provisioning.global_config_path = lambda: self._cfg  # type: ignore[assignment]
+        return self._cfg.parent
+
+    def __exit__(self, *exc):
+        provisioning.global_config_path = self._orig  # type: ignore[assignment]
 
 
 def test_build_loom_descriptor_creates_voice_binding_for_spatial_signal():
@@ -71,6 +85,69 @@ def test_forkuniverse_optional_idea_knobs_are_wired():
     assert creation["tone_mix"] == {"dread": 1.0, "tense": 1.0}
     assert creation["location_flavor"] == "a fog-bound cul-de-sac"
     assert creation["starting_context"].startswith("The dummy")
+
+
+def test_signal_catalog_surfaces_runtime_inputs(tmp_path):
+    with _TempConfig(tmp_path):
+        catalog = {item["key"]: item for item in signal_catalog()}
+        assert "simulated_spatial_array" in catalog
+        assert catalog["pc_telemetry"]["sensitive"] is True
+        assert "will ask on open" in catalog["pc_telemetry"]["status"]
+
+
+def test_signal_catalog_surfaces_remembered_targets(tmp_path):
+    with _TempConfig(tmp_path) as root:
+        target = root / "moco.json"
+        target.write_text("{}", encoding="utf-8")
+        provisioning.save_antenna_target("moco", target)
+        catalog = {item["key"]: item for item in signal_catalog()}
+        assert "remembered target" in catalog["moco"]["status"]
+        assert catalog["moco"]["remembered_target"] == str(target)
+
+
+def test_build_loom_descriptor_accepts_custom_signal_params():
+    descriptor = build_loom_descriptor(
+        _state(
+            world_kind="none",
+            enabled_signals=[],
+            voice_provider="none",
+            custom_signal_kind="moco",
+            custom_signal_name="body_motion",
+            custom_signal_params_text='{"telemetry_path": "logs/moco.json"}',
+        )
+    )
+    assert descriptor["telemetry"][0]["source"] == "moco"
+    assert descriptor["telemetry"][0]["name"] == "body_motion"
+    assert descriptor["telemetry"][0]["telemetry_path"] == "logs/moco.json"
+
+
+def test_build_loom_descriptor_uses_remembered_signal_target(tmp_path):
+    with _TempConfig(tmp_path) as root:
+        db = root / "league.sqlite"
+        db.write_text("stub", encoding="utf-8")
+        provisioning.save_antenna_target("atl_league", db)
+        descriptor = build_loom_descriptor(
+            _state(
+                world_kind="none",
+                enabled_signals=["atl_league"],
+                voice_provider="none",
+                transient_enabled=False,
+            )
+        )
+        assert descriptor["telemetry"][0]["db_path"] == str(db)
+
+
+def test_build_loom_descriptor_can_inline_uploaded_transient_template(tmp_path):
+    template = tmp_path / "surface.txt"
+    template.write_text("CASE: {title}\n\n{body}", encoding="utf-8")
+    descriptor = build_loom_descriptor(
+        _state(
+            transient_template_path=str(template),
+            transient_body_template="",
+        )
+    )
+    transient = descriptor["transient_surfaces"][0]
+    assert transient["body_template"].startswith("CASE:")
 
 
 def _forkuniverse_state(name, premise, genres):

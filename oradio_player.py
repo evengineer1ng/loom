@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+import descriptor_club_gate
 import oradio_resolver
 import provisioning
 
@@ -232,6 +233,25 @@ def build_launch_env(
     return env
 
 
+def launch_descriptor_oradio(
+    package_path: Path,
+    *,
+    gui_gate: bool = True,
+    descriptor: Optional[Dict[str, Any]] = None,
+) -> int:
+    import loom_player_ui
+
+    package_path = Path(package_path)
+    descriptor = descriptor or loom_player_ui.read_descriptor(package_path)
+    if gui_gate and not descriptor_club_gate.show_descriptor_club_gate(
+        package_path,
+        descriptor=descriptor,
+    ):
+        print("Descriptor playback deferred until the club is ready.", file=sys.stderr)
+        return 3
+    return loom_player_ui.main([str(package_path)])
+
+
 def launch_oradio(
     package_path: Path,
     *,
@@ -243,12 +263,9 @@ def launch_oradio(
     gui_gate: bool = False,
 ) -> int:
     # A descriptor-style .oradio (the Loom authoring path) is a plain YAML file, not a
-    # zip package. Route those straight to the descriptor player instead of the
-    # extract-and-launch kernel path, which only understands packaged stations.
+    # zip package. Route those through the descriptor-first club gate and player path.
     if package_path.is_file() and not zipfile.is_zipfile(package_path):
-        import loom_player_ui
-
-        return loom_player_ui.main([str(package_path)])
+        return launch_descriptor_oradio(package_path, gui_gate=gui_gate)
 
     if not RUNTIME_PATH.exists():
         print(f"Playback kernel not found: {RUNTIME_PATH}", file=sys.stderr)

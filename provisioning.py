@@ -354,6 +354,47 @@ def assets_summary() -> str:
 
 
 # ----------------------------------------------------------------------------
+# Loom transient template library — remembered machine-level
+# ----------------------------------------------------------------------------
+def transient_template_library_dir() -> Path:
+    base = global_config_path().parent / "loom_templates"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def list_transient_templates() -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for path in sorted(transient_template_library_dir().glob("*")):
+        if not path.is_file():
+            continue
+        out.append({
+            "name": path.stem,
+            "path": str(path),
+            "filename": path.name,
+            "bytes": path.stat().st_size,
+        })
+    return out
+
+
+def save_transient_template(path: Any, *, alias: str = "") -> Dict[str, Any]:
+    src = Path(path)
+    if not src.is_file():
+        return {"ok": False, "error": f"not a file: {path}"}
+    safe = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in (alias or src.stem)).strip("_-")
+    safe = safe or "custom_template"
+    dest = transient_template_library_dir() / f"{safe}{src.suffix or '.txt'}"
+    dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    return {"ok": True, "name": safe, "path": str(dest)}
+
+
+def read_transient_template(name: str) -> str:
+    for item in list_transient_templates():
+        if item["name"] == name or item["filename"] == name:
+            return Path(item["path"]).read_text(encoding="utf-8")
+    raise FileNotFoundError(name)
+
+
+# ----------------------------------------------------------------------------
 # Antenna targets — remembered machine-level (the SAME club, for what a station listens to)
 # ----------------------------------------------------------------------------
 # A station's antenna points at something on THIS machine — a game folder, a log, a port. We try to

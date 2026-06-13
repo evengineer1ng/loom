@@ -24,7 +24,9 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from oradio_engine.club import DEFAULT_THEME, DEFAULT_THEME_PACKS
+import provisioning
+from oradio_engine.club import Club, DEFAULT_THEME, DEFAULT_THEME_PACKS
+from oradio_engine.registry import SOURCE_KINDS, SOURCE_META
 
 
 # loom_studio.py lives in loom/; the descriptor player (loom_player_ui.py) lives at
@@ -60,12 +62,46 @@ WORLD_OPTIONS = [
     ("none", "No pre-built world"),
 ]
 
-SIGNAL_OPTIONS = [
-    ("simulated_spatial_array", "Spatial array (simulated)"),
-    ("pc_telemetry", "PC telemetry"),
-    ("ring_telemetry", "Ring telemetry"),
-    ("video_capture_sim", "Video capture (simulated)"),
-]
+SIGNAL_LIBRARY = {
+    "simulated_spatial_array": {
+        "label": "Spatial array",
+        "description": "Presence across named nodes. Works immediately with the simulated house path.",
+        "target_key": "",
+        "target_kind": "",
+    },
+    "pc_telemetry": {
+        "label": "PC telemetry",
+        "description": "OS activity and resource changes. Sensitive; asks for consent on open.",
+        "target_key": "",
+        "target_kind": "",
+    },
+    "ring_telemetry": {
+        "label": "Ring telemetry",
+        "description": "Heart rate, motion, and sleep-style signals from the ring path.",
+        "target_key": "",
+        "target_kind": "",
+    },
+    "video_capture_sim": {
+        "label": "Video capture",
+        "description": "A simulated capture-card feed for perception-driven looms.",
+        "target_key": "",
+        "target_kind": "",
+    },
+    "moco": {
+        "label": "MoCo telemetry",
+        "description": "Motion / pose telemetry from a remembered file path or a path you point once.",
+        "target_key": "moco",
+        "target_kind": "file",
+    },
+    "atl_league": {
+        "label": "ATL league data",
+        "description": "A local research / trading league sqlite the loom can listen to.",
+        "target_key": "atl_league",
+        "target_kind": "file",
+    },
+}
+
+SIGNAL_OPTIONS = [(key, meta["label"]) for key, meta in SIGNAL_LIBRARY.items() if key in SOURCE_KINDS]
 
 VOICE_PROVIDERS = ["none", "kokoro", "piper", "elevenlabs", "google", "azure"]
 
@@ -85,6 +121,118 @@ TIME_PERIOD_OPTIONS = [
 GENRE_OPTIONS = ["horror", "drama", "mystery", "thriller", "comedy", "romance", "sci-fi", "fantasy"]
 
 TONE_OPTIONS = ["dread", "tense", "hopeful", "comedic", "melancholic", "wondrous"]
+
+LOOM_PRESETS = {
+    "Goosebumps Street": {
+        "name": "Fear Street",
+        "world_kind": "forkuniverse",
+        "premise": "A goosebumps horror neighborhood where a cursed dummy stalks kids.",
+        "time_period": "1980s",
+        "genres": ["horror"],
+        "tones": ["dread", "tense"],
+        "location_flavor": "a fog-bound cul-de-sac",
+        "starting_context": "The dummy was found on the porch at dawn.",
+    },
+    "Boardroom Pressure": {
+        "name": "Boardroom",
+        "world_kind": "forkuniverse",
+        "premise": "A tense corporate boardroom tracking quarterly earnings and hostile takeovers.",
+        "time_period": "present_day",
+        "genres": ["drama", "thriller"],
+        "tones": ["tense"],
+        "location_flavor": "a glass-walled executive floor",
+        "starting_context": "The market opens in twenty minutes.",
+    },
+    "Living House": {
+        "name": "home-region",
+        "world_kind": "neikos",
+        "premise": "A living house that listens to movement and speaks back.",
+        "time_period": "present_day",
+        "genres": [],
+        "tones": ["wondrous"],
+        "location_flavor": "a home stitched together by ambient signals",
+        "starting_context": "Presence drifts from room to room.",
+        "signals": ["simulated_spatial_array"],
+    },
+}
+
+TRANSIENT_FORMATS = {
+    "Bulletin": "{title}\n\n{body}",
+    "Case File": "CASE: {title}\nSOURCE: {source}\nTYPE: {type}\nPRIORITY: {priority}\n\n{body}",
+    "Ticker": "{source} / {type} / {priority}\n{title}",
+    "Witness Note": "Witness note:\n\n{body}\n\n— surfaced by {source}",
+}
+
+
+def signal_catalog() -> List[Dict[str, Any]]:
+    club = Club()
+    catalog = []
+    for key, label in SIGNAL_OPTIONS:
+        spec = SIGNAL_LIBRARY.get(key, {})
+        meta = SOURCE_META.get(key, {})
+        sensitive = bool(meta.get("sensitive"))
+        reads = str(meta.get("reads") or "")
+        remembered_target = ""
+        if spec.get("target_key"):
+            remembered_target = provisioning.get_antenna_target(spec["target_key"])
+        if key == "simulated_spatial_array":
+            capability = "spatial_array"
+            status = "simulated now"
+        elif key == "video_capture_sim":
+            capability = "capture_card"
+            status = "simulated now"
+        elif remembered_target:
+            capability = spec.get("target_key") or key
+            status = f"remembered target: {Path(remembered_target).name}"
+        else:
+            capability = key
+            status = "consent already granted" if club.has_consent(key) else "will ask on open"
+        catalog.append({
+            "key": key,
+            "label": label,
+            "description": spec.get("description", ""),
+            "sensitive": sensitive,
+            "reads": reads,
+            "capability": capability,
+            "status": status,
+            "target_key": spec.get("target_key", ""),
+            "target_kind": spec.get("target_kind", ""),
+            "remembered_target": remembered_target,
+        })
+    return catalog
+
+
+def transient_format_catalog() -> List[Dict[str, Any]]:
+    catalog = [{"kind": "builtin", "name": name, "label": f"Builtin · {name}"} for name in TRANSIENT_FORMATS]
+    for item in provisioning.list_transient_templates():
+        catalog.append({
+            "kind": "custom",
+            "name": item["name"],
+            "label": f"Library · {item['name']}",
+            "path": item["path"],
+        })
+    return catalog
+
+
+def transient_label_to_name(label: str) -> str:
+    for item in transient_format_catalog():
+        if item["label"] == label or item["name"] == label:
+            return item["name"]
+    return label
+
+
+def transient_name_to_label(name: str) -> str:
+    for item in transient_format_catalog():
+        if item["name"] == name or item["label"] == name:
+            return item["label"]
+    return name
+
+
+def transient_catalog_item(name_or_label: str) -> Optional[Dict[str, Any]]:
+    for item in transient_format_catalog():
+        if item["name"] == name_or_label or item["label"] == name_or_label:
+            return item
+    return None
 
 
 @dataclass
@@ -112,6 +260,13 @@ class LoomFormState:
     tones: List[str] = field(default_factory=list)
     location_flavor: str = ""
     starting_context: str = ""
+    custom_signal_kind: str = ""
+    custom_signal_name: str = ""
+    custom_signal_params_text: str = ""
+    moco_telemetry_path: str = ""
+    atl_db_path: str = ""
+    transient_format: str = "Bulletin"
+    transient_template_path: str = ""
 
 
 def station_id_from_text(raw: str) -> str:
@@ -137,8 +292,41 @@ def parse_csv_nodes(raw: str) -> List[str]:
     return [node for node in nodes if node]
 
 
+def parse_json_object(raw: str, *, label: str) -> Dict[str, Any]:
+    text = (raw or "").strip()
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} must be valid JSON.") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} must decode to an object.")
+    return data
+
+
 def default_transient_body() -> str:
     return "{title}\n\n{body}"
+
+
+def transient_body_from_state(state: LoomFormState) -> str:
+    if state.transient_template_path.strip():
+        return Path(state.transient_template_path.strip()).read_text(encoding="utf-8")
+    selected_name = transient_label_to_name(state.transient_format)
+    library_names = {item["name"] for item in provisioning.list_transient_templates()}
+    if selected_name in library_names:
+        return provisioning.read_transient_template(selected_name)
+    if state.transient_body_template.strip():
+        return state.transient_body_template.strip()
+    return TRANSIENT_FORMATS.get(selected_name, default_transient_body())
+
+
+def signal_target_from_state(state: LoomFormState, kind: str) -> str:
+    if kind == "moco":
+        return state.moco_telemetry_path.strip() or provisioning.get_antenna_target("moco")
+    if kind == "atl_league":
+        return state.atl_db_path.strip() or provisioning.get_antenna_target("atl_league")
+    return ""
 
 
 def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
@@ -199,8 +387,25 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
                     {"title": "motion frame", "body": "Something in the scene changed.", "type": "frame", "priority": 0.6},
                 ],
             })
+        elif signal == "moco":
+            target = signal_target_from_state(state, "moco")
+            if not target:
+                raise ValueError("MoCo telemetry needs a remembered or chosen telemetry file.")
+            telemetry.append({"source": signal, "name": "moco", "telemetry_path": target})
+        elif signal == "atl_league":
+            target = signal_target_from_state(state, "atl_league")
+            if not target:
+                raise ValueError("ATL league input needs a remembered or chosen sqlite file.")
+            telemetry.append({"source": signal, "name": "league", "db_path": target})
         else:
             telemetry.append({"source": signal, "name": signal.replace("_telemetry", "").replace("_sim", "")})
+    if state.custom_signal_kind.strip():
+        custom = {
+            "source": state.custom_signal_kind.strip(),
+            "name": state.custom_signal_name.strip() or state.custom_signal_kind.strip(),
+        }
+        custom.update(parse_json_object(state.custom_signal_params_text, label="Custom signal parameters"))
+        telemetry.append(custom)
     if telemetry:
         descriptor["telemetry"] = telemetry
 
@@ -240,7 +445,7 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
                 "name": station_id_from_text(state.transient_title or "glimpse"),
                 "title": state.transient_title or "Transient surface",
                 "min_priority": float(state.transient_min_priority),
-                "body_template": state.transient_body_template or default_transient_body(),
+                "body_template": transient_body_from_state(state),
             }
         ]
 
@@ -257,6 +462,7 @@ class LoomStudioApp:
         self.root.geometry("1060x860")
         self.root.configure(bg=UI["bg"])
 
+        self.preset_var = tk.StringVar(value="Choose a Loom preset…")
         self.name_var = tk.StringVar(value="my-loom")
         self.world_var = tk.StringVar(value=WORLD_OPTIONS[0][1])
         self.seed_var = tk.StringVar(value="42")
@@ -271,17 +477,31 @@ class LoomStudioApp:
         self.loop_path_var = tk.StringVar(value="")
         self.voice_provider_var = tk.StringVar(value="kokoro")
         self.spatial_nodes_var = tk.StringVar(value="front_door, living_room, kitchen")
+        self.custom_signal_kind_var = tk.StringVar(value="")
+        self.custom_signal_name_var = tk.StringVar(value="")
+        self.moco_telemetry_path_var = tk.StringVar(value=provisioning.get_antenna_target("moco"))
+        self.atl_db_path_var = tk.StringVar(value=provisioning.get_antenna_target("atl_league"))
         self.transient_enabled_var = tk.BooleanVar(value=True)
         self.transient_title_var = tk.StringVar(value="Glimpse")
         self.transient_min_priority_var = tk.StringVar(value="0.6")
+        self.transient_format_var = tk.StringVar(value=transient_name_to_label("Bulletin"))
+        self.transient_template_path_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="Answer the four questions, then export.")
         self.last_export_path: Optional[Path] = None
 
         self.signal_vars = {key: tk.BooleanVar(value=(key == "simulated_spatial_array")) for key, _ in SIGNAL_OPTIONS}
+        self.signal_catalog = signal_catalog()
+        self.signal_status_vars = {
+            item["key"]: tk.StringVar(value=f"{'Sensitive' if item['sensitive'] else 'Safe'} · {item['status']}")
+            for item in self.signal_catalog
+        }
+        self.transient_catalog = transient_format_catalog()
 
         self.voice_text = tk.Text(self.root, height=6, bg=UI["surface"], fg=UI["text"], insertbackground=UI["text"], relief="flat", font=FONT_MONO)
+        self.custom_signal_params_text = tk.Text(self.root, height=5, bg=UI["surface"], fg=UI["text"], insertbackground=UI["text"], relief="flat", font=FONT_MONO)
         self.transient_body_text = tk.Text(self.root, height=6, bg=UI["surface"], fg=UI["text"], insertbackground=UI["text"], relief="flat", font=FONT_MONO)
         self.preview_text = tk.Text(self.root, height=18, bg=UI["surface"], fg=UI["text"], insertbackground=UI["text"], relief="flat", font=FONT_MONO)
+        self.transient_format_combo: Optional[ttk.Combobox] = None
 
         self._build()
         self._seed_defaults()
@@ -299,6 +519,25 @@ class LoomStudioApp:
             fg=UI["muted"],
             bg=UI["bg"],
         ).pack(anchor="w", pady=(2, 12))
+        preset_row = tk.Frame(wrap, bg=UI["bg"])
+        preset_row.pack(fill="x", pady=(0, 8))
+        tk.Label(preset_row, text="Try a curated loom", font=FONT_SMALL, fg=UI["muted"], bg=UI["bg"]).pack(side="left")
+        preset_combo = ttk.Combobox(
+            preset_row,
+            textvariable=self.preset_var,
+            values=["Choose a Loom preset…", *LOOM_PRESETS.keys()],
+            state="readonly",
+            width=28,
+        )
+        preset_combo.pack(side="left", padx=(10, 8))
+        preset_combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_selected_preset())
+        tk.Label(
+            preset_row,
+            text="Use a working example to seed Q1–Q4, then mutate it into your own loom.",
+            font=FONT_SMALL,
+            fg=UI["muted"],
+            bg=UI["bg"],
+        ).pack(side="left")
 
         self._question_card(wrap, "1. Define the universe", self._build_question_one)
         self._question_card(wrap, "2. Define the signals", self._build_question_two)
@@ -355,20 +594,43 @@ class LoomStudioApp:
 
     def _build_question_two(self, parent: tk.Widget) -> None:
         signals = tk.Frame(parent, bg=UI["panel"])
-        signals.grid(row=0, column=0, columnspan=4, sticky="w")
-        for idx, (key, label) in enumerate(SIGNAL_OPTIONS):
+        signals.grid(row=0, column=0, columnspan=4, sticky="ew")
+        for idx, item in enumerate(self.signal_catalog):
+            card = tk.Frame(signals, bg=UI["panel_2"], highlightbackground=UI["line"], highlightthickness=1)
+            card.grid(row=idx // 2, column=idx % 2, padx=(0, 10), pady=(0, 10), sticky="nsew")
             tk.Checkbutton(
-                signals,
-                text=label,
-                variable=self.signal_vars[key],
-                bg=UI["panel"],
+                card,
+                text=item["label"],
+                variable=self.signal_vars[item["key"]],
+                bg=UI["panel_2"],
                 fg=UI["text"],
-                activebackground=UI["panel"],
+                activebackground=UI["panel_2"],
                 activeforeground=UI["text"],
                 selectcolor=UI["surface"],
                 command=self.refresh_preview,
-            ).grid(row=0, column=idx, padx=(0, 12), sticky="w")
+            ).pack(anchor="w", padx=10, pady=(8, 4))
+            meta = item["description"] or item["reads"] or "Simulated input; no extra machine hookup required."
+            tk.Label(card, text=meta, font=FONT_SMALL, fg=UI["muted"], bg=UI["panel_2"], wraplength=310, justify="left").pack(anchor="w", padx=10)
+            reads = item["reads"] or "No extra endpoint details."
+            tk.Label(card, text=reads, font=FONT_SMALL, fg=UI["muted"], bg=UI["panel_2"], wraplength=310, justify="left").pack(anchor="w", padx=10, pady=(2, 0))
+            tk.Label(
+                card,
+                textvariable=self.signal_status_vars[item["key"]],
+                font=FONT_SMALL,
+                fg=UI["accent"],
+                bg=UI["panel_2"],
+            ).pack(anchor="w", padx=10, pady=(4, 8))
         self._entry_row(parent, 1, "Spatial nodes", self.spatial_nodes_var, 80)
+        self._entry_row(parent, 2, "MoCo file", self.moco_telemetry_path_var, 52)
+        tk.Button(parent, text="Browse + Remember", command=lambda: self._browse_signal_target("moco"), bg=UI["panel_2"], fg=UI["text"], relief="flat").grid(row=2, column=3, padx=6, sticky="w")
+        self._entry_row(parent, 3, "ATL sqlite", self.atl_db_path_var, 52)
+        tk.Button(parent, text="Browse + Remember", command=lambda: self._browse_signal_target("atl_league"), bg=UI["panel_2"], fg=UI["text"], relief="flat").grid(row=3, column=3, padx=6, sticky="w")
+        tk.Label(parent, text="Bring your own source (advanced)", font=FONT_H2, fg=UI["text"], bg=UI["panel"]).grid(row=2, column=0, columnspan=4, sticky="w", pady=(14, 6))
+        tk.Label(parent, text="Bring your own source (advanced)", font=FONT_H2, fg=UI["text"], bg=UI["panel"]).grid(row=4, column=0, columnspan=4, sticky="w", pady=(14, 6))
+        self._entry_row(parent, 5, "Custom source kind", self.custom_signal_kind_var, 24)
+        self._entry_row(parent, 5, "Custom name", self.custom_signal_name_var, 24, col=2)
+        tk.Label(parent, text="Custom source parameters (JSON object)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=6, column=0, columnspan=4, sticky="w", pady=(8, 4))
+        self.custom_signal_params_text.grid(row=7, column=0, columnspan=4, sticky="ew")
 
     def _build_question_three(self, parent: tk.Widget) -> None:
         mode = tk.Frame(parent, bg=UI["panel"])
@@ -396,14 +658,19 @@ class LoomStudioApp:
         ).grid(row=0, column=0, columnspan=2, sticky="w")
         self._entry_row(parent, 1, "Surface title", self.transient_title_var, 28)
         self._entry_row(parent, 1, "Min priority", self.transient_min_priority_var, 10, col=2)
-        tk.Label(parent, text="Body template (`{title}` / `{body}` / `{source}` / `{type}`)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=2, column=0, columnspan=4, sticky="w", pady=(8, 4))
-        self.transient_body_text.grid(row=3, column=0, columnspan=4, sticky="ew")
+        self._combo_row(parent, 2, "Output format", self.transient_format_var, [item["label"] for item in self.transient_catalog])
+        self._entry_row(parent, 3, "Template file", self.transient_template_path_var, 52)
+        tk.Button(parent, text="Import Into Library", command=self._browse_transient_template, bg=UI["panel_2"], fg=UI["text"], relief="flat").grid(row=3, column=3, padx=6, sticky="w")
+        tk.Label(parent, text="Body template (`{title}` / `{body}` / `{source}` / `{type}`)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 4))
+        self.transient_body_text.grid(row=5, column=0, columnspan=4, sticky="ew")
 
     def _seed_defaults(self) -> None:
         self.voice_text.delete("1.0", "end")
         self.voice_text.insert("1.0", "host=af_sarah\nanalyst=am_adam\nwitness=bf_emma")
+        self.custom_signal_params_text.delete("1.0", "end")
+        self.custom_signal_params_text.insert("1.0", "{\n  \n}")
         self.transient_body_text.delete("1.0", "end")
-        self.transient_body_text.insert("1.0", default_transient_body())
+        self.transient_body_text.insert("1.0", TRANSIENT_FORMATS[transient_label_to_name(self.transient_format_var.get())])
 
     def _entry_row(self, parent: tk.Widget, row: int, label: str, var: tk.StringVar, width: int, *, col: int = 0) -> None:
         tk.Label(parent, text=label, font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=row, column=col, sticky="w", padx=(0, 8), pady=4)
@@ -416,11 +683,44 @@ class LoomStudioApp:
         combo = ttk.Combobox(parent, textvariable=var, values=options, state="readonly", width=34)
         combo.grid(row=row, column=1, sticky="w", pady=4)
         combo.bind("<<ComboboxSelected>>", lambda _e: self._sync_combo_value())
+        if var is self.transient_format_var:
+            self.transient_format_combo = combo
 
     def _sync_combo_value(self) -> None:
         reverse = {label: key for key, label in WORLD_OPTIONS}
         if self.world_var.get() in reverse:
             self.world_var.set(reverse[self.world_var.get()])
+        selected_name = transient_label_to_name(self.transient_format_var.get())
+        item = transient_catalog_item(selected_name)
+        if item and item.get("kind") == "custom":
+            self.transient_template_path_var.set(item.get("path", ""))
+            self.transient_body_text.delete("1.0", "end")
+            self.transient_body_text.insert("1.0", provisioning.read_transient_template(selected_name))
+        elif selected_name in TRANSIENT_FORMATS:
+            self.transient_template_path_var.set("")
+            self.transient_body_text.delete("1.0", "end")
+            self.transient_body_text.insert("1.0", TRANSIENT_FORMATS[selected_name])
+        self.refresh_preview()
+
+    def _apply_selected_preset(self) -> None:
+        preset = LOOM_PRESETS.get(self.preset_var.get())
+        if not preset:
+            return
+        self.name_var.set(preset.get("name", self.name_var.get()))
+        world_key = preset.get("world_kind", "forkuniverse")
+        label_lookup = {key: label for key, label in WORLD_OPTIONS}
+        self.world_var.set(label_lookup.get(world_key, world_key))
+        self.premise_var.set(preset.get("premise", ""))
+        self.time_period_var.set(preset.get("time_period", TIME_PERIOD_OPTIONS[0]))
+        self.location_flavor_var.set(preset.get("location_flavor", ""))
+        self.starting_context_var.set(preset.get("starting_context", ""))
+        for key, var in self.genre_vars.items():
+            var.set(key in preset.get("genres", []))
+        for key, var in self.tone_vars.items():
+            var.set(key in preset.get("tones", []))
+        wanted_signals = preset.get("signals", ["simulated_spatial_array"])
+        for key, var in self.signal_vars.items():
+            var.set(key in wanted_signals)
         self.refresh_preview()
 
     def _browse_loop(self) -> None:
@@ -432,6 +732,52 @@ class LoomStudioApp:
         if path:
             self.loop_path_var.set(path)
             self.loop_mode_var.set("custom")
+            self.refresh_preview()
+
+    def _refresh_signal_catalog_state(self) -> None:
+        self.signal_catalog = signal_catalog()
+        for item in self.signal_catalog:
+            value = f"{'Sensitive' if item['sensitive'] else 'Safe'} · {item['status']}"
+            if item["key"] in self.signal_status_vars:
+                self.signal_status_vars[item["key"]].set(value)
+
+    def _browse_signal_target(self, key: str) -> None:
+        title = "Choose a remembered signal target"
+        path = filedialog.askopenfilename(parent=self.root, title=title)
+        if not path:
+            return
+        res = provisioning.save_antenna_target(key, path)
+        if not res.get("ok"):
+            messagebox.showerror("Signal target", str(res.get("error")), parent=self.root)
+            return
+        if key == "moco":
+            self.moco_telemetry_path_var.set(path)
+        elif key == "atl_league":
+            self.atl_db_path_var.set(path)
+        self._refresh_signal_catalog_state()
+        self.status_var.set(f"Remembered {key} target for future looms.")
+        self.refresh_preview()
+
+    def _browse_transient_template(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Choose a transient template",
+            filetypes=[("Template text", "*.txt *.md *.html"), ("All files", "*.*")],
+        )
+        if path:
+            res = provisioning.save_transient_template(path)
+            if not res.get("ok"):
+                messagebox.showerror("Transient template", str(res.get("error")), parent=self.root)
+                return
+            self.transient_catalog = transient_format_catalog()
+            if self.transient_format_combo is not None:
+                self.transient_format_combo.configure(values=[item["label"] for item in self.transient_catalog])
+            self.transient_format_var.set(transient_name_to_label(str(res["name"])))
+            self.transient_template_path_var.set(str(res["path"]))
+            text = Path(str(res["path"])).read_text(encoding="utf-8")
+            self.transient_body_text.delete("1.0", "end")
+            self.transient_body_text.insert("1.0", text)
+            self.status_var.set(f"Imported transient template '{res['name']}' into the library.")
             self.refresh_preview()
 
     def gather_state(self) -> LoomFormState:
@@ -465,6 +811,11 @@ class LoomStudioApp:
             tones=[key for key, var in self.tone_vars.items() if var.get()],
             location_flavor=self.location_flavor_var.get().strip(),
             starting_context=self.starting_context_var.get().strip(),
+            custom_signal_kind=self.custom_signal_kind_var.get().strip(),
+            custom_signal_name=self.custom_signal_name_var.get().strip(),
+            custom_signal_params_text=self.custom_signal_params_text.get("1.0", "end").strip(),
+            transient_format=self.transient_format_var.get().strip() or "Bulletin",
+            transient_template_path=self.transient_template_path_var.get().strip(),
         )
 
     def refresh_preview(self, *_args: Any) -> None:
@@ -513,7 +864,7 @@ class LoomStudioApp:
             self.last_export_path = EXPORTS_DIR / f"{station_id_from_text(self.name_var.get())}.oradio"
             self.last_export_path.write_text(yaml.safe_dump(descriptor, sort_keys=False, allow_unicode=True), encoding="utf-8")
         self.status_var.set(f"Opening {self.last_export_path.name} in the Loom player")
-        subprocess.Popen([sys.executable, str(ROOT_DIR / "loom_player_ui.py"), str(self.last_export_path)], cwd=str(ROOT_DIR))
+        subprocess.Popen([sys.executable, str(ROOT_DIR / "oradio_player.py"), str(self.last_export_path)], cwd=str(ROOT_DIR))
 
     def run(self) -> None:
         self.root.mainloop()

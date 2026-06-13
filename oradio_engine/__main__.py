@@ -12,6 +12,7 @@ import argparse
 import sys
 from collections import Counter
 
+from oradio_engine.bootstrap import ensure_repo_plugin_paths
 from oradio_engine.club import Club
 from oradio_engine.loader import open_oradio
 
@@ -78,6 +79,12 @@ def _cmd_club(args: argparse.Namespace) -> int:
 
 
 def main(argv=None) -> int:
+    ensure_repo_plugin_paths()
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(prog="oradio_engine", description="Open and run .oradio files.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 

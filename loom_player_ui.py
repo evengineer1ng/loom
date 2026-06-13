@@ -157,6 +157,10 @@ class VoiceSpeaker:
     def ready(self) -> bool:
         return self.provider is not None
 
+    @property
+    def required(self) -> bool:
+        return self.provider_name != "none"
+
     def next_voice(self) -> str:
         key = self.order[self.index % len(self.order)]
         self.index += 1
@@ -198,6 +202,9 @@ class LoomPlayerApp:
         self.triggered_transients: set[str] = set()
         self.narrator = Narrator.from_descriptor(self.descriptor)
         self.voice = VoiceSpeaker(self.descriptor)
+        if self.voice.required and not self.voice.ready:
+            detail = self.voice.last_error or "Voice playback is not ready for this descriptor."
+            raise RuntimeError(detail)
         self.playing = False
         self.tick_ms = 1400
         self.loop_after_id: Optional[str] = None
@@ -457,7 +464,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Open a Loom descriptor-style .oradio")
     parser.add_argument("descriptor", type=Path)
     args = parser.parse_args(argv)
-    app = LoomPlayerApp(args.descriptor)
+    try:
+        app = LoomPlayerApp(args.descriptor)
+    except Exception as exc:
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("The Loom Player", str(exc), parent=root)
+            root.destroy()
+        except Exception:
+            print(f"The Loom Player could not open: {exc}", flush=True)
+        return 2
     app.run()
     return 0
 
