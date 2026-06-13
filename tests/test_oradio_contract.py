@@ -376,6 +376,15 @@ def test_oradio_player_windows_association_plan_quotes_paths():
     assert plan["open_command_key"].endswith(r"RadioOS.Station\shell\open\command")
 
 
+def test_oradio_player_windows_association_plan_uses_packaged_exe_when_frozen(monkeypatch):
+    monkeypatch.setattr(oradio_player.app_paths, "is_frozen", lambda: True)
+
+    plan = oradio_player.windows_association_plan(executable_path=r"C:\Radio OS\loom.exe")
+
+    assert plan["open_command"] == '"C:\\Radio OS\\loom.exe" "%1"'
+    assert plan["default_icon"] == '"C:\\Radio OS\\loom.exe",0'
+
+
 def test_oradio_player_prints_association_plan_without_package(capsys):
     code = oradio_player.main(["--print-windows-association"])
 
@@ -383,6 +392,21 @@ def test_oradio_player_prints_association_plan_without_package(capsys):
     assert code == 0
     assert ".oradio Windows association plan" in out
     assert "open command:" in out
+
+
+def test_oradio_player_without_package_opens_loom(monkeypatch):
+    called = {}
+
+    def fake_launch():
+        called["opened"] = True
+        return 0
+
+    monkeypatch.setattr(oradio_player, "launch_loom_authoring", fake_launch)
+
+    code = oradio_player.main([])
+
+    assert code == 0
+    assert called["opened"] is True
 
 
 def test_oradio_player_shell_cli_routes_to_runtime_shell(monkeypatch, tmp_path):

@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+import app_paths
 import provisioning
 from oradio_engine.club import Club, DEFAULT_THEME, DEFAULT_THEME_PACKS
 from oradio_engine.registry import SOURCE_KINDS, SOURCE_META
@@ -918,7 +919,7 @@ class LoomStudioApp:
             self.last_export_path.write_text(yaml.safe_dump(descriptor, sort_keys=False, allow_unicode=True), encoding="utf-8")
             self._write_thumbnail_for_descriptor(descriptor, self.last_export_path)
         self.status_var.set(f"Opening {self.last_export_path.name} in the Loom player")
-        subprocess.Popen([sys.executable, str(ROOT_DIR / "oradio_player.py"), str(self.last_export_path)], cwd=str(ROOT_DIR))
+        subprocess.Popen(app_paths.opener_command(self.last_export_path), cwd=str(ROOT_DIR))
 
     def run(self) -> None:
         self.root.mainloop()

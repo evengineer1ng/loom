@@ -9,22 +9,25 @@ station. Studio and shell_bookmark.py are not involved.
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
 import subprocess
 import sys
 import tempfile
+import traceback
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
 
+import app_paths
 import descriptor_club_gate
 import oradio_resolver
 import provisioning
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = app_paths.bundle_root()
 # The .oradio plays in the themed GUI runtime fork (monokai via radio_os_theme), NOT headless
 # bookmark.py. bookmark.py stays preserved as the frozen ancestor; oradio_runtime.py is the player.
 RUNTIME_PATH = BASE_DIR / "oradio_runtime.py"
@@ -60,14 +63,22 @@ def quote_windows_arg(value: Path | str) -> str:
 
 def windows_association_plan(
     *,
+    executable_path: Optional[Path] = None,
     python_exe: Optional[Path] = None,
     player_path: Optional[Path] = None,
     shell: bool = False,
 ) -> Dict[str, str]:
-    python_exe = Path(python_exe or sys.executable)
-    player_path = Path(player_path or PLAYER_PATH)
     shell_arg = " --shell" if shell else ""
-    open_command = f"{quote_windows_arg(python_exe)} {quote_windows_arg(player_path)}{shell_arg} \"%1\""
+    default_icon_target: Path
+    if executable_path is not None or app_paths.is_frozen():
+        exe = Path(executable_path or sys.executable)
+        open_command = f"{quote_windows_arg(exe)}{shell_arg} \"%1\""
+        default_icon_target = exe
+    else:
+        python_exe = Path(python_exe or sys.executable)
+        player_path = Path(player_path or PLAYER_PATH)
+        open_command = f"{quote_windows_arg(python_exe)} {quote_windows_arg(player_path)}{shell_arg} \"%1\""
+        default_icon_target = player_path
     return {
         "extension": ORADIO_EXT,
         "prog_id": ORADIO_PROG_ID,
@@ -76,7 +87,7 @@ def windows_association_plan(
         "prog_id_key": rf"Software\Classes\{ORADIO_PROG_ID}",
         "open_command_key": rf"Software\Classes\{ORADIO_PROG_ID}\shell\open\command",
         "open_command": open_command,
-        "default_icon": f"{quote_windows_arg(player_path)},0",
+        "default_icon": f"{quote_windows_arg(default_icon_target)},0",
     }
 
 
@@ -184,7 +195,7 @@ def tune_in_hint(readiness: Dict[str, Any]) -> str:
     llm = readiness.get("llm", {}) if isinstance(readiness.get("llm"), dict) else {}
     provider = llm.get("provider") or "ollama"
     model = llm.get("model") or ""
-    pieces = [sys.executable, str(PLAYER_PATH), "--tune-in", "--provider", str(provider)]
+    pieces = app_paths.opener_command(extra_args=["--tune-in", "--provider", str(provider)])
     if model:
         pieces.extend(["--model", str(model)])
     if provider == "ollama":
@@ -231,6 +242,37 @@ def build_launch_env(
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUNBUFFERED"] = "1"
     return env
+
+
+def launch_loom_authoring() -> int:
+    from loom import loom_studio
+
+    loom_studio.main()
+    return 0
+
+
+def run_runtime_inprocess(
+    extract_dir: Path,
+    readiness: Dict[str, Any],
+    *,
+    headless: bool = False,
+    local_audio: bool = False,
+) -> int:
+    env = build_launch_env(extract_dir, readiness, headless=headless, local_audio=local_audio)
+    old_env = os.environ.copy()
+    old_cwd = os.getcwd()
+    try:
+        os.environ.clear()
+        os.environ.update(env)
+        os.chdir(str(BASE_DIR))
+        mod = importlib.import_module("oradio_runtime")
+        mod = importlib.reload(mod)
+        mod.main()
+        return 0
+    finally:
+        os.chdir(old_cwd)
+        os.environ.clear()
+        os.environ.update(old_env)
 
 
 def launch_descriptor_oradio(
@@ -297,9 +339,9 @@ def launch_oradio(
             print(f"  · LLM: {tune_in_hint(readiness)}", file=sys.stderr)
         if any("voice" in str(b).lower() for b in blocking):
             print("  · Voices: I couldn't find your voice models. Show me once and I'll remember:", file=sys.stderr)
-            print(f"      {sys.executable} {PLAYER_PATH} --remember-voices \"<folder with your .onnx voices>\"", file=sys.stderr)
+            print(f"      {' '.join(app_paths.opener_command(extra_args=['--remember-voices', '\"<folder with your .onnx voices>\"']))}", file=sys.stderr)
         if any("piper" in str(b).lower() for b in blocking):
-            print(f"      {sys.executable} {PLAYER_PATH} --remember-piper \"<path to piper>\"", file=sys.stderr)
+            print(f"      {' '.join(app_paths.opener_command(extra_args=['--remember-piper', '\"<path to piper>\"']))}", file=sys.stderr)
         return 3
 
     # Antennas: surface what the station listens to (non-blocking — silence is valid; only the LLM
@@ -325,6 +367,10 @@ def launch_oradio(
             print("  → pointed antenna(s) at resolved targets: " + "; ".join(_applied))
     except Exception:
         pass
+
+    if app_paths.is_frozen() and not headless and wait:
+        print(f"\nLaunching packaged runtime in-process from {extract_dir}")
+        return run_runtime_inprocess(extract_dir, readiness, headless=headless, local_audio=local_audio)
 
     env = build_launch_env(extract_dir, readiness, headless=headless, local_audio=local_audio)
     cmd = [sys.executable, "-u", str(RUNTIME_PATH)]
@@ -464,7 +510,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return oradio_player_ui.main([str(args.package)])
 
     if args.package is None:
-        parser.error("package is required unless installing/printing the Windows association or running Tune-In")
+        return launch_loom_authoring()
 
     return launch_oradio(
         args.package,
@@ -478,4 +524,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception:
+        if app_paths.is_frozen():
+            app_paths.append_packaged_error(traceback.format_exc())
+        raise

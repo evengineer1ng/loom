@@ -13,6 +13,7 @@ import argparse
 import queue
 import threading
 import time
+import traceback
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 from PIL import ImageTk
 
+import app_paths
 import provisioning
 from oradio_engine import (
     Club,
@@ -549,9 +551,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception:
             print(f"The Loom Player could not open: {exc}", flush=True)
         return 2
-    app.run()
+    try:
+        app.run()
+    except Exception as exc:
+        if app_paths.is_frozen():
+            app_paths.append_packaged_error(traceback.format_exc())
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("The Loom Player", str(exc), parent=root)
+            root.destroy()
+        except Exception:
+            print(f"The Loom Player crashed: {exc}", flush=True)
+        return 2
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception:
+        if app_paths.is_frozen():
+            app_paths.append_packaged_error(traceback.format_exc())
+        raise

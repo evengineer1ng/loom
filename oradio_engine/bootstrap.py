@@ -11,9 +11,11 @@ import os
 import sys
 from pathlib import Path
 
+import app_paths
+
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return app_paths.bundle_root()
 
 
 def ensure_repo_plugin_paths() -> None:
