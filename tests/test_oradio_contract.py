@@ -12,11 +12,11 @@ import yaml
 
 # Some contract tests exercise the export-to-Radio-OS seam (feed-plugin discovery,
 # the RADIO_OS_PLUGINS kernel env, the station plugin roster). They need the Radio OS
-# plugins/ tree, which isn't vendored into the standalone Oracle Radio repo — so they
-# skip there and run wherever that station tree is present.
+# *station* plugin tree — keyed on a feed plugin (antenna_http.py) that only exists in
+# a Radio OS checkout, NOT our plugins/organs/ reference organs. Skip when absent.
 _needs_station = pytest.mark.skipif(
-    not (Path(__file__).resolve().parent.parent / "plugins").is_dir(),
-    reason="needs Radio OS plugins/ tree (export-to-station seam)",
+    not (Path(__file__).resolve().parent.parent / "plugins" / "antenna_http.py").exists(),
+    reason="needs Radio OS station plugin tree (export-to-station seam)",
 )
 
 
