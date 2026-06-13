@@ -9,7 +9,7 @@ This repo ships three things:
 
 | Ship target | What it is | Where it lives here |
 |---|---|---|
-| **loom** | The act of authoring an `.oradio` (a word — verb/noun/instrument, like *dream*: "I loom a world"), through a 4-question I/O contract — **Q1 world · Q2 inputs · Q3 theme+voice · Q4 outputs** — where the surface is just *where you loom*. | `radio_os_studio.py`, the player/UI modules, `docs/THE_LOOM.md` (surface still in progress) |
+| **loom** | The act of authoring an `.oradio` (a word — verb/noun/instrument, like *dream*: "I loom a world"), through a 4-question I/O contract — **Q1 world · Q2 inputs · Q3 theme+voice · Q4 outputs** — where the surface is just *where you loom*. | `loom/` (studio, exporter, shim/antenna generator, broadcast grammar), `docs/THE_LOOM.md` (surface still in progress) |
 | **the `.oradio` format** | The KB declaration: a world, its inputs, a skin+voice, its outputs — all references, no content. That low-level-ness is *why* it's a portable file. | `spec/examples/*.oradio`, `spec/ORADIO_FORMAT.md`, `spec/ORADIO_SCHEMA_V2.md`, `oradio_engine/descriptor.py` |
 | **the club** | Machine-level capability resolver + the host the engine runs in (the bouncer): configure once, reuse forever; ask only when new/changed/vanished; install missing plugins from wherever they live. | `oradio_engine/club.py`, `provisioning.py` |
 

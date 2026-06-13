@@ -26,12 +26,12 @@ dev = ["pytest>=8"]
 oradio = "oradio_engine.__main__:main"
 
 [tool.setuptools]
-# Flat layout: the engine package + the top-level Oracle Radio modules.
-packages = ["oradio_engine", "oradio_engine.shims"]
+# Contract-centric layout, mid-migration: the engine package, the loom (authoring)
+# package, and the still-top-level club/player modules (moving into club/ next).
+packages = ["oradio_engine", "oradio_engine.shims", "loom"]
 py-modules = [
     "oradio_player", "oradio_player_ui", "oradio_resolver", "oradio_runtime",
-    "oradio_validate", "export_oradio", "antenna_resolver", "broadcast_grammar",
-    "club_gate", "ribbon_bridge", "signal_heat", "shim_generator",
-    "provisioning", "radio_os_theme", "show_the_machine", "radio_os_studio",
+    "oradio_validate", "antenna_resolver", "club_gate", "ribbon_bridge",
+    "signal_heat", "provisioning", "radio_os_theme", "show_the_machine",
     "sfx_sourcing",
 ]
