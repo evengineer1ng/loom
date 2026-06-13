@@ -47,3 +47,68 @@ def test_build_loom_descriptor_requires_world_or_signal():
         assert "at least one world or one signal" in str(exc)
     else:
         raise AssertionError("expected a ValueError when no world and no signal are declared")
+
+
+def test_forkuniverse_creation_includes_required_time_period():
+    """The bug: CreationRequest requires time_period; the studio never sent it, so the
+    headline path crashed on load. Guard the field at the descriptor level."""
+    descriptor = build_loom_descriptor(_state(enabled_signals=[]))
+    assert descriptor["world"]["creation"]["time_period"]
+
+
+def test_forkuniverse_optional_idea_knobs_are_wired():
+    descriptor = build_loom_descriptor(
+        _state(
+            enabled_signals=[],
+            genres=["horror"],
+            tones=["dread", "tense"],
+            location_flavor="a fog-bound cul-de-sac",
+            starting_context="The dummy was found on the porch at dawn.",
+        )
+    )
+    creation = descriptor["world"]["creation"]
+    assert creation["genre_mix"] == {"horror": 1.0}
+    assert creation["tone_mix"] == {"dread": 1.0, "tense": 1.0}
+    assert creation["location_flavor"] == "a fog-bound cul-de-sac"
+    assert creation["starting_context"].startswith("The dummy")
+
+
+def _forkuniverse_state(name, premise, genres):
+    return _state(
+        name=name,
+        premise=premise,
+        enabled_signals=[],
+        voice_provider="none",
+        transient_enabled=False,
+        genres=genres,
+    )
+
+
+def test_headline_descriptor_loads_and_ticks_on_the_real_engine():
+    """The regression that would have caught the crash: don't just check the dict shape —
+    load the forkuniverse descriptor through the federation and run it."""
+    from oradio_engine import load_oradio
+
+    descriptor = build_loom_descriptor(
+        _forkuniverse_state("Fear Street", "a goosebumps horror neighborhood where a cursed dummy stalks kids", ["horror"])
+    )
+    engine = load_oradio(descriptor)
+    for _ in range(25):
+        engine.tick()
+    assert engine.bus, "a forkuniverse world should surface events over 25 ticks"
+
+
+def test_premise_perturbs_the_world_at_a_fixed_seed():
+    """Same seed (42), different premise + genre -> the bus must diverge. If only the seed
+    mattered, the idea would be cosmetic."""
+    from oradio_engine import load_oradio
+
+    def run(state):
+        engine = load_oradio(build_loom_descriptor(state))
+        for _ in range(25):
+            engine.tick()
+        return [c.title for c in engine.bus]
+
+    horror = run(_forkuniverse_state("Fear Street", "a goosebumps horror neighborhood where a cursed dummy stalks kids", ["horror"]))
+    boardroom = run(_forkuniverse_state("Boardroom", "a tense corporate boardroom tracking quarterly earnings and hostile takeovers", ["drama"]))
+    assert horror != boardroom, "the premise must perturb the world, not just the seed"

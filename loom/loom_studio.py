@@ -69,6 +69,23 @@ SIGNAL_OPTIONS = [
 
 VOICE_PROVIDERS = ["none", "kokoro", "piper", "elevenlabs", "google", "azure"]
 
+# Q1 idea knobs. time_period is a free string on CreationRequest; these are convenient
+# presets. genres/tones are multiselect -> genre_mix / tone_mix weighted dicts.
+TIME_PERIOD_OPTIONS = [
+    "present_day",
+    "near_future",
+    "far_future",
+    "1980s",
+    "victorian",
+    "medieval",
+    "ancient",
+    "timeless",
+]
+
+GENRE_OPTIONS = ["horror", "drama", "mystery", "thriller", "comedy", "romance", "sci-fi", "fantasy"]
+
+TONE_OPTIONS = ["dread", "tense", "hopeful", "comedic", "melancholic", "wondrous"]
+
 
 @dataclass
 class LoomFormState:
@@ -244,6 +261,11 @@ class LoomStudioApp:
         self.world_var = tk.StringVar(value=WORLD_OPTIONS[0][1])
         self.seed_var = tk.StringVar(value="42")
         self.premise_var = tk.StringVar(value="")
+        self.time_period_var = tk.StringVar(value=TIME_PERIOD_OPTIONS[0])
+        self.location_flavor_var = tk.StringVar(value="")
+        self.starting_context_var = tk.StringVar(value="")
+        self.genre_vars = {key: tk.BooleanVar(value=False) for key in GENRE_OPTIONS}
+        self.tone_vars = {key: tk.BooleanVar(value=False) for key in TONE_OPTIONS}
         self.loop_mode_var = tk.StringVar(value="builtin")
         self.theme_var = tk.StringVar(value=DEFAULT_THEME)
         self.loop_path_var = tk.StringVar(value="")
@@ -308,6 +330,28 @@ class LoomStudioApp:
         self._combo_row(parent, 1, "World organ", self.world_var, [label for _key, label in WORLD_OPTIONS])
         self._entry_row(parent, 2, "Seed", self.seed_var, 12)
         self._entry_row(parent, 3, "Premise", self.premise_var, 80)
+        self._combo_row(parent, 4, "Time period", self.time_period_var, TIME_PERIOD_OPTIONS)
+        self._checkbox_row(parent, 5, "Genre", self.genre_vars)
+        self._checkbox_row(parent, 6, "Tone", self.tone_vars)
+        self._entry_row(parent, 7, "Location flavor", self.location_flavor_var, 80)
+        self._entry_row(parent, 8, "Starting context", self.starting_context_var, 80)
+
+    def _checkbox_row(self, parent: tk.Widget, row: int, label: str, var_map: Dict[str, tk.BooleanVar]) -> None:
+        tk.Label(parent, text=label, font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=4)
+        group = tk.Frame(parent, bg=UI["panel"])
+        group.grid(row=row, column=1, columnspan=3, sticky="w", pady=4)
+        for idx, (key, var) in enumerate(var_map.items()):
+            tk.Checkbutton(
+                group,
+                text=key,
+                variable=var,
+                bg=UI["panel"],
+                fg=UI["text"],
+                activebackground=UI["panel"],
+                activeforeground=UI["text"],
+                selectcolor=UI["surface"],
+                command=self.refresh_preview,
+            ).grid(row=idx // 4, column=idx % 4, padx=(0, 10), sticky="w")
 
     def _build_question_two(self, parent: tk.Widget) -> None:
         signals = tk.Frame(parent, bg=UI["panel"])
@@ -416,6 +460,11 @@ class LoomStudioApp:
             transient_title=self.transient_title_var.get().strip(),
             transient_min_priority=min_priority,
             transient_body_template=self.transient_body_text.get("1.0", "end").strip(),
+            time_period=self.time_period_var.get().strip() or "present_day",
+            genres=[key for key, var in self.genre_vars.items() if var.get()],
+            tones=[key for key, var in self.tone_vars.items() if var.get()],
+            location_flavor=self.location_flavor_var.get().strip(),
+            starting_context=self.starting_context_var.get().strip(),
         )
 
     def refresh_preview(self, *_args: Any) -> None:
