@@ -89,6 +89,28 @@ def _action_to_button(**_) -> Transform:
     return lambda c: {"button": c.title} if c.type == "action" else None
 
 
+def _tape_to_speech(lexicon: str = "", register: str = "plain", mode: str = "radio", **_) -> Transform:
+    """Domain-agnostic deterministic narration: read the row's roles (from its tags), realize
+    a spoken line via the lexicon + grammar. No basketball, no ML — swap the lexicon and the
+    same transform speaks any tape. See oradio_engine/speech.py (lazy import = pure decoder)."""
+    from oradio_engine.speech import SpeechGrammar, roles_from_tags
+
+    grammar = (SpeechGrammar.from_file(lexicon, register=register, mode=mode)
+               if lexicon else SpeechGrammar({}, register=register, mode=mode))
+    state: Dict[str, Any] = {"prev": None, "i": 0}
+
+    def t(c: NormalizedCandidate) -> Optional[Dict[str, Any]]:
+        roles = roles_from_tags(c.tags)
+        if not roles.get("action"):
+            return None
+        line = grammar.line(roles, prev_roles=state["prev"], position=state["i"], key=c.post_id)
+        state["prev"] = roles
+        state["i"] += 1
+        return {"text": line} if line else None
+
+    return t
+
+
 def _play_to_call(**_) -> Transform:
     # The DETERMINISTIC half: a play row becomes a flat PA call spoken verbatim. The play
     # text already carries no running score, so the call ("Made Three Point Jumper ...")
@@ -168,6 +190,7 @@ register_transform("presence_to_signal", _presence_to_signal)
 register_transform("presence_to_speech", _presence_to_speech)
 register_transform("frame_to_observation", _frame_to_observation)
 register_transform("action_to_button", _action_to_button)
+register_transform("tape_to_speech", _tape_to_speech)    # deterministic domain-agnostic narration
 register_transform("play_to_call", _play_to_call)        # deterministic PA call (verbatim)
 register_transform("play_to_mindset", _play_to_mindset)  # live interior monologue (LLM)
 

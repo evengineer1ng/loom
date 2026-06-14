@@ -1,0 +1,10 @@
+{
+  "make":    {"pos": "verb", "past": "made",      "register": {"plain": ["made", "hit"], "hype": ["drilled", "buried", "knocked down"], "poetic": ["sent it home", "let it fall"]}},
+  "miss":    {"pos": "verb", "past": "missed",    "register": {"plain": ["missed"], "hype": ["bricked", "clanked it"], "poetic": ["watched it rim out"]}},
+  "rebound": {"pos": "verb", "past": "rebounded", "register": {"plain": ["grabbed", "pulled down"], "hype": ["ripped down", "snatched"], "poetic": ["gathered"]}},
+  "foul":    {"pos": "verb", "past": "fouled",    "register": {"plain": ["fouled"], "hype": ["hacked"], "poetic": ["reached in"]}},
+
+  "rise":    {"pos": "verb", "past": "rose",      "register": {"plain": ["rose", "climbed"], "hype": ["spiked", "shot up"], "poetic": ["lifted like a tide", "quickened"]}},
+  "settle":  {"pos": "verb", "past": "settled",   "register": {"plain": ["settled", "eased"], "hype": ["dropped back"], "poetic": ["sank into stillness", "came home"]}},
+  "move":    {"pos": "verb", "past": "moved",     "register": {"plain": ["moved", "walked"], "hype": ["got going"], "poetic": ["began to wander"]}}
+}
