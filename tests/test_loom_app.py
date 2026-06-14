@@ -22,3 +22,13 @@ def test_role_inference_drives_the_badge():
     assert role_of("neikos") == "world"
     assert role_of("simulated_spatial_array") == "source"
     assert role_of("mystery") == "source"                        # default: just emit on the wire
+
+
+def test_installed_plugins_expose_the_club_for_mixing():
+    from loom.app import installed_plugins
+    items = installed_plugins()
+    names = {i["plugin"] for i in items}
+    assert "simulated_spatial_array" in names                    # a known source is browsable
+    assert any(i["role"] == "world" for i in items)              # organs show up too
+    sensitive = [i for i in items if i["sensitive"]]
+    assert sensitive and all(i["reads"] for i in sensitive)      # sensitive ones say what they read

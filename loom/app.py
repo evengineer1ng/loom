@@ -74,6 +74,24 @@ def role_of(plugin: str, as_role: str = "") -> str:
     return Connection(plugin=plugin, as_role=as_role).role()
 
 
+def installed_plugins() -> List[Dict[str, Any]]:
+    """The club's currently-registered plugins — so the author can mix & match, not guess names.
+
+    Reads the live registry: every world organ + telemetry source the engine knows how to
+    build. Sensitive sources advertise what they'd read (the consent handshake), surfaced here
+    so the palette can mark them.
+    """
+    from oradio_engine.registry import ORGAN_KINDS, SOURCE_KINDS, SOURCE_META
+    items: List[Dict[str, Any]] = []
+    for name in sorted(ORGAN_KINDS):
+        items.append({"plugin": name, "role": "world", "sensitive": False, "reads": ""})
+    for name in sorted(SOURCE_KINDS):
+        m = SOURCE_META.get(name, {})
+        items.append({"plugin": name, "role": "source",
+                      "sensitive": bool(m.get("sensitive")), "reads": m.get("reads", "")})
+    return items
+
+
 def _hsl_hex(h: float, s: float, l: float) -> str:
     import colorsys
     r, g, b = colorsys.hls_to_rgb((h % 360) / 360.0, l, s)
