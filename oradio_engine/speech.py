@@ -206,9 +206,10 @@ class Grammar:
         return text
 
     def clause(self, roles: Dict[str, str], *, subject: Optional[str] = None) -> str:
-        """A bare clause for weaving into a thread — no opener/transition/coda/terminal period."""
+        """A bare clause for weaving into a thread — no opener/transition/coda/terminal period.
+        A roleless event (a raw headline from another tape) folds in verbatim."""
         if not roles.get("action"):
-            return ""
+            return (roles.get("body") or roles.get("title") or "").strip()
         actor = subject if subject is not None else roles.get("actor", "")
         core = f"{actor} {self._verb(roles['action'])}{self._object_phrase(roles)}"
         m = roles.get("magnitude")

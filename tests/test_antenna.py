@@ -25,8 +25,17 @@ def test_toggle_drops_a_lane_live():
     assert len(s) == 2 and all(e["source"] == "race" for e in s)
 
 
-def test_heterogeneous_headline_speaks_verbatim():
-    # a raw headline (no roles) rides the same stream as structured events, spoken verbatim
-    G = Grammar({"form": "{actor} {verb}"}, {"pit": "pitted"})
-    line = LiveNarrator(NEWS).step(G, Mixer(salience=0.5))
-    assert line is not None and line[1] == "Breaking F1 news"
+def test_the_mix_weaves_related_news_into_the_same_thread():
+    # THE MIX: one thread pulled from all tapes, linked by the entity it names
+    G = Grammar({"form": "{actor} {verb}{object}{magnitude}{coda}", "codas": {"*": [""]}}, {"clock": "clocked"})
+    events = [
+        {"action": "clock", "actor": "Hamilton", "object": "fastest lap", "definite": "1",
+         "priority": 0.9, "lap": "13", "_key": "r"},
+        {"body": "Hamilton wins again in Barcelona", "priority": 0.6, "_key": "n1"},   # names Hamilton
+        {"body": "Generic paddock gossip", "priority": 0.6, "_key": "n2"},             # names nobody
+    ]
+    nar = LiveNarrator(events)
+    _lap, line = nar.step(G, Mixer(depth=0, salience=0.5))
+    assert "Hamilton clocked the fastest lap" in line
+    assert "meanwhile, Hamilton wins again in Barcelona" in line   # race + news, ONE thread
+    assert nar.step(G, Mixer(depth=0, salience=0.5)) is None        # unlinked gossip dropped

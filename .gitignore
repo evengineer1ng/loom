@@ -27,3 +27,9 @@ Desktop.ini
 # Endpoint state — the Club lives on the machine, never in the repo.
 # (default dir is ~/.oradio_club; ignore any local copy if one lands here)
 .oradio_club/
+
+# Regenerable caches & outputs (tapes/grammars under data/ ARE tracked; these are not)
+data/f1_cache/
+exports/
+transcripts/
+*.spec.bak

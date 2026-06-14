@@ -38,34 +38,55 @@ class Mixer:
 
 
 class LiveNarrator:
-    """Streams a (replay) tape one salient event at a time, narrating each through the mixer's
-    CURRENT settings — so faders ride live. Pure (no UI), so the booth's brain is testable."""
+    """Streams ONE thread pulled from ALL tapes. Structured events (with roles) are the spine —
+    threaded through the mixer's live settings. Roleless events (headlines from other tapes) are
+    ASIDES, indexed by the entity they mention (entities come free from the spine's actors); when a
+    thread is about driver X, its related news is woven into the SAME thread — not a parallel lane.
+    Pure (no UI), so the booth's brain is testable."""
 
     def __init__(self, events: Sequence[Event], *, rules: Optional[List[Dict[str, Any]]] = None) -> None:
-        self.events = events
-        self.cause, self.effect = build_edges(events, rules)
+        self.spine = [e for e in events if e.get("action")]
+        actors = {e.get("actor") for e in self.spine if e.get("actor")}
+        # entity-link the roleless asides (a headline joins the thread of the driver it names)
+        self.asides: Dict[str, List[str]] = {}
+        for e in events:
+            if e.get("action"):
+                continue
+            body = (e.get("body") or e.get("title") or "").strip()
+            low = body.lower()
+            for a in actors:
+                if a and a.lower() in low:
+                    self.asides.setdefault(a, []).append(body)
+                    break
+        self.cause, self.effect = build_edges(self.spine, rules)
         self.i = 0
         self.consumed: set = set()
+        self._aside_ptr: Dict[str, int] = {}
 
     @property
     def done(self) -> bool:
-        return self.i >= len(self.events)
+        return self.i >= len(self.spine)
+
+    def _take_aside(self, actor: Optional[str]) -> Optional[str]:
+        q = self.asides.get(actor or "")
+        if not q:
+            return None
+        p = self._aside_ptr.get(actor, 0)
+        if p < len(q):
+            self._aside_ptr[actor] = p + 1
+            return q[p]
+        return None
 
     def step(self, grammar: Grammar, mixer: "Mixer") -> Optional[Tuple[Any, str]]:
-        """Advance to the next salient, unconsumed event and narrate it. Returns (lap, line),
-        or None for this beat (silent thread-material, filtered out, or end of tape)."""
-        while self.i < len(self.events):
+        """Advance to the next salient, unconsumed spine event, thread it, and weave in one related
+        aside from another tape. Returns (lap, line) or None (filtered / end)."""
+        while self.i < len(self.spine):
             idx = self.i
             self.i += 1
-            e = self.events[idx]
+            e = self.spine[idx]
             if idx in self.consumed or float(e.get("priority", 0)) < mixer.salience:
                 continue
-            if not e.get("action"):
-                # a raw headline (e.g. RSS) — no roles to thread; speak it verbatim
-                self.consumed.add(idx)
-                body = e.get("body") or e.get("title") or ""
-                return (e.get("lap"), body) if body.strip() else self.step(grammar, mixer)
-            line = weave(self.events, idx, grammar, depth=mixer.depth, flavour=mixer.flavour,
+            line = weave(self.spine, idx, grammar, depth=mixer.depth, flavour=mixer.flavour,
                          continuity=mixer.continuity, cause=self.cause, effect=self.effect)
             causes, fwds = pull(self.cause, self.effect, idx, mixer.depth, flavour=mixer.flavour)
             self.consumed.add(idx)
@@ -73,6 +94,11 @@ class LiveNarrator:
                 self.consumed.add(j)
             for k, _ in fwds:
                 self.consumed.add(k)
+            aside = self._take_aside(e.get("actor"))     # THE MIX: pull from another tape, same thread
+            if aside:
+                line = line.rstrip(". ") + " — meanwhile, " + aside
+                if not line.endswith((".", "!", "?")):
+                    line += "."
             return e.get("lap"), line
         return None
 

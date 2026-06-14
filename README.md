@@ -13,6 +13,23 @@ This repo ships three things:
 | **the `.oradio` format** | The KB declaration: a world, its inputs, a skin+voice, its outputs — all references, no content. That low-level-ness is *why* it's a portable file. | `spec/examples/*.oradio`, `spec/ORADIO_FORMAT.md`, `spec/ORADIO_SCHEMA_V2.md`, `oradio_engine/descriptor.py` |
 | **the club** | Machine-level capability resolver + the host the engine runs in (the bouncer): configure once, reuse forever; ask only when new/changed/vanished; install missing plugins from wherever they live. | `oradio_engine/club.py`, `provisioning.py` |
 
+## The booth — a tape speaks (no model, no GPU)
+
+A tape (a finished F1 race, a heart-rate log, an RSS feed) becomes language you read or hear,
+**deterministically**. A small grammar gives it a voice; the loom pulls causal threads; the inquiry
+layer asks questions; the mixer is the faders you ride live. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+```bash
+python -m tools.bake_f1 --year 2026 --round 7 --out data/f1.json   # ingest a tape (one-time)
+python -m tools.loom_report --tape data/f1.json --grammar data/grammars/intern.json \
+    --verbs data/english/irregular_verbs.json --rules data/f1_causal_rules.json \
+    --inquiry data/inquiry/f1.json --out transcripts/f1.txt          # read it (~25 ms)
+python loom_booth.py --tape f1=data/f1.json                          # play it: ride the faders
+```
+
+The whole narration stack — speech · threads · inquiry · mixer · antenna — is ~800 LOC + a few KB of
+JSON declarations, deterministic, stdlib.
+
 ## The boundary (why this repo is small)
 
 - **Engine core** (`oradio_engine/*.py`) — pure Python stdlib. The decoder is
@@ -74,3 +91,9 @@ intake tape so replay is byte-identical too.
 
 See `docs/SIMULATION_ENGINE.md` (canonical), `docs/CANON.md` (current-canon index),
 and `docs/THE_LOOM.md`.
+
+## License
+
+Dual-scoped (see [`LICENSING.md`](LICENSING.md)): the **format/spec** (`spec/`) is **Apache-2.0**
+so anyone can implement `.oradio`/`.loom` freely; the **engine, booth, and apps** are **AGPL-3.0**
+(no closed SaaS forks). Commercial dual-licensing is available — copyright is held in one place.
