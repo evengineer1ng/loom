@@ -29,6 +29,29 @@ The simulation *organs* (ForkUniverse, Neikos, FTB, Oracle, ATL, MoCo) stay in t
 own homes; the engine points at their emitted data. Oracle Radio is the decoder + the
 format + the examples — not the organ host.
 
+## Repo layout (decided)
+
+```
+oradio_engine/   the .oradio DECODER + the contract (5-verb organ protocol, dipole,
+                 lens, binding, evidence, index, club). Pure: importable on stdlib +
+                 PyYAML alone — enforced by tests/test_engine_purity.py. This IS the
+                 governed core; there is deliberately no separate contract/ folder.
+spec/            the format — examples + ORADIO_FORMAT / SCHEMA docs.
+loom/            authoring — studio, exporter, narration, antenna/shim generator.
+plugins/organs/  pre-stocked light reference organs (oracle, neikos, forkuniverse).
+*.py (root)      the player + club runtime (player UI, resolver, provisioning,
+                 ribbon, voice, theme, visual rasterization callers…). The endpoint
+                 layer. Flat for now.
+```
+
+**The one rule that matters: the decoder stays pure** (the guard test fails the build
+if a heavy dep — PIL/numpy/cv2/tkinter/audio — creeps into `import oradio_engine`,
+because that would fork the file format). Everything else is code-organization taste:
+folding the flat root runtime into a `club/` package is an optional later cleanup, not
+a format concern, and is **not** pursued mid-development to avoid churn. The earlier
+"contract-centric 4-folder" plan is retired in favor of this — the engine package
+already *is* the contract.
+
 ## Run
 
 ```bash
