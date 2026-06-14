@@ -57,6 +57,19 @@ def article(word: str) -> str:
     return "an" if word[:1].lower() in "aeiou" else "a"
 
 
+def regular_past(verb: str) -> str:
+    """Graceful default tense for any verb the lexicon doesn't cover — regular English past.
+    (Irregulars are handled by a lexicon ``past``; this is the floor, not the whole grammar.)"""
+    v = (verb or "").strip()
+    if not v:
+        return v
+    if v.endswith("e"):
+        return v + "d"
+    if len(v) > 2 and v[-1] == "y" and v[-2] not in "aeiou":
+        return v[:-1] + "ied"
+    return v + "ed"
+
+
 def _pick(pool: Sequence[str], *key: Any) -> str:
     """Deterministic choice from a pool: same key -> same pick (variety that replays exactly)."""
     if not pool:
@@ -92,7 +105,7 @@ class SpeechGrammar:
     def _verb(self, action: str, key: Any) -> str:
         entry = self.lex.get(action, {})
         registers = entry.get("register", {}) if isinstance(entry, dict) else {}
-        pool = registers.get(self.register) or registers.get("plain") or [entry.get("past") or action]
+        pool = registers.get(self.register) or registers.get("plain") or [entry.get("past") or regular_past(action)]
         return _pick(pool, action, self.register, key)
 
     def line(self, roles: Dict[str, str], *, prev_roles: Optional[Dict[str, str]] = None,
