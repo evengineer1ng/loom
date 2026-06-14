@@ -107,13 +107,32 @@ def main() -> None:
     # pit stops — keep ALL of them as low-salience thread MATERIAL (a pit is the cause behind a
     # fresh-tyre fastest lap or an inherited lead). The threaded transcript seeds on the big
     # moments and pulls these in as causes; a flat reader can filter them out by priority.
-    for _, row in laps[laps["PitInTime"].notna()].iterrows():
-        lap = int(row["LapNumber"])
+    last_pit = {}
+    for _, row in laps[laps["PitInTime"].notna()].sort_values("LapNumber").iterrows():
+        drv, lap = nm(row["Driver"]), int(row["LapNumber"])
+        if drv in last_pit and lap - last_pit[drv] <= 1:
+            continue  # in/out-lap or duplicate timing = ONE stop (the bug the inquiry layer caught)
+        last_pit[drv] = lap
         events.append((lap, 0.45, _row(
-            f"{nm(row['Driver'])} pits", 0.45,
-            ["f1", f"lap:{lap}", "actor:" + nm(row["Driver"]), "action:pit"])))
+            f"{drv} pits", 0.45, ["f1", f"lap:{lap}", "actor:" + drv, "action:pit"])))
 
     events.sort(key=lambda e: (e[0], -e[1]))
+
+    # STATE: stamp the ordinal (Nth time this actor did this action) onto each event, in order.
+    # General (any domain), and it gives the narrator continuity ("pitted for the second time").
+    seen = {}
+    for _lap, _prio, row in events:
+        actor = action = None
+        for t in row["tags"]:
+            if t.startswith("actor:"):
+                actor = t.split(":", 1)[1]
+            elif t.startswith("action:"):
+                action = t.split(":", 1)[1]
+        if actor and action:
+            key = (actor, action)
+            seen[key] = seen.get(key, 0) + 1
+            row["tags"].append(f"ordinal:{seen[key]}")
+
     rows = [e[2] for e in events]
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)

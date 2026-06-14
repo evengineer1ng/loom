@@ -1,18 +1,22 @@
-"""Inquiry — the tape asks questions about itself. The genome of threads.
+"""Inquiry — the tape asks questions about itself. Questions are the genome of threads.
 
-A QUESTION is born where reality deviates from an EXPECTATION (an assumption). You can't ask
-without an expectation, and challenging it = pulling the thread to check the tape. More active
-expectations -> more deviations noticed -> more questions -> more threads. That set of active
-expectations is the CURIOSITY DIAL — the birth-genome that generates seeds, sitting *above* the
-thread-puller (a question is a seed with a reason to exist).
+A QUESTION is born where reality deviates from an EXPECTATION. You can't ask without an
+expectation; challenging it = pulling the thread to check the tape. More active expectations ->
+more deviations noticed -> more questions -> more threads. That is the CURIOSITY DIAL.
 
-Deterministic: expectations are anomaly/violation TEMPLATES over the event tape — kin to the
-engine's EvidenceService, where a prediction is an assumption the tape later grades. Templated
-questions are free and repeatable; a genuinely novel "huh, that's weird" is authored by an LLM at
-compile time (a new template), runtime stays pure. Pure stdlib.
+This layer is a DECLARATION, not a pile of domain rules (the same lesson as grammar): the
+expectation TYPES are general — "an actor shouldn't repeat an action", "an effect should follow a
+cause", "a streak shouldn't be undone" — and a domain (F1, rings, markets) INSTANTIATES them with
+parameters (data/inquiry/*.json). The fourth tiny declaration:
+
+    .loom = what world · .oradio = how it runs · grammar = how it speaks · inquiry = what it wonders
+
+Deterministic; kin to EvidenceService (a prediction is an assumption the tape grades). Templated
+questions are free; a genuinely novel one is an LLM-authored template at compile time, runtime pure.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -37,10 +41,10 @@ class Question:
     salience: float = 0.9
 
 
-# --- expectation / anomaly templates (each: events -> [Question]) --------------------------- #
-def anomalous_repeat(events: Sequence[Event], *, action: str, within: int = 4) -> List[Question]:
-    """Expectation: an actor doesn't repeat ACTION within `within` laps. Deviation -> question.
-    (This is the one you spotted: the suspicious double-pit.)"""
+# --- general expectation TYPES (domain-agnostic; a declaration instantiates them) ----------- #
+def _no_repeat(events: Sequence[Event], spec: Dict[str, Any]) -> List[Question]:
+    """An actor should not repeat ``action`` within ``within`` laps. (Your double-pit.)"""
+    action, within = spec["action"], spec.get("within", 4)
     out: List[Question] = []
     last: Dict[str, Optional[int]] = {}
     for i, e in enumerate(events):
@@ -50,15 +54,15 @@ def anomalous_repeat(events: Sequence[Event], *, action: str, within: int = 4) -
         prev = last.get(actor)
         if prev is not None and lap is not None and lap - prev <= within:
             gap = lap - prev
-            out.append(Question(about=i, kind="repeat",
-                                text=f"Why did {actor} {action} again only {gap} lap{'s' if gap != 1 else ''} after the last?"))
+            out.append(Question(i, "no_repeat",
+                                f"Why did {actor} {action} again only {gap} lap{'s' if gap != 1 else ''} after the last?"))
         last[actor] = lap if lap is not None else prev
     return out
 
 
-def violation_without_cause(events: Sequence[Event], *, effect: str, cause: str, within: int = 6) -> List[Question]:
-    """Expectation: EFFECT follows a recent same-actor CAUSE (fast lap <- fresh tyres). Deviation:
-    the effect with no preceding cause -> question (where did it come from?)."""
+def _expect_cause(events: Sequence[Event], spec: Dict[str, Any]) -> List[Question]:
+    """An ``effect`` should follow a recent same-actor ``cause``; the effect with no cause -> question."""
+    effect, cause, within = spec["effect"], spec["cause"], spec.get("within", 6)
     out: List[Question] = []
     for i, e in enumerate(events):
         if e.get("action") != effect:
@@ -67,33 +71,63 @@ def violation_without_cause(events: Sequence[Event], *, effect: str, cause: str,
         has_cause = any(
             c.get("action") == cause and c.get("actor") == actor and _lap(c) is not None
             and lap is not None and 0 <= lap - _lap(c) <= within
-            for c in events[:i]
-        )
+            for c in events[:i])
         if not has_cause:
-            out.append(Question(about=i, kind="uncaused",
-                                text=f"How did {actor} manage the {effect} with no recent {cause}?"))
+            out.append(Question(i, "expect_cause",
+                                f"How did {actor} manage the {effect} with no recent {cause}?"))
     return out
 
 
-# The dial: each entry is one expectation. Turning more on = more questions = more threads.
-QUESTION_BANK: Dict[str, Callable[[Sequence[Event]], List[Question]]] = {
-    "double_pit": lambda ev: anomalous_repeat(ev, action="pit", within=4),
-    "double_fastest": lambda ev: anomalous_repeat(ev, action="clock", within=3),
-    "unexplained_pace": lambda ev: violation_without_cause(ev, effect="clock", cause="pit"),
+def _streak_then(events: Sequence[Event], spec: Dict[str, Any]) -> List[Question]:
+    """A streak of ``action_a`` (>= ``count``) shouldn't be immediately undone by ``action_b``
+    (a charge that stalls at the pit window). Deviation -> question."""
+    action_a, action_b = spec["action_a"], spec["action_b"]
+    count, within = spec.get("count", 2), spec.get("within", 2)
+    out: List[Question] = []
+    streak: Dict[str, Tuple[int, Optional[int]]] = {}  # actor -> (run length, last action_a lap)
+    for i, e in enumerate(events):
+        actor, act, lap = e.get("actor"), e.get("action"), _lap(e)
+        if act == action_a:
+            run, _ = streak.get(actor, (0, None))
+            streak[actor] = (run + 1, lap)
+        elif act == action_b:
+            run, last_lap = streak.get(actor, (0, None))
+            if run >= count and last_lap is not None and lap is not None and lap - last_lap <= within:
+                out.append(Question(i, "streak_then",
+                                    f"Did {actor}'s run of {run} {action_a}s stall when they {action_b} on lap {lap}?"))
+            streak[actor] = (0, None)
+    return out
+
+
+EXPECTATION_TYPES: Dict[str, Callable[[Sequence[Event], Dict[str, Any]], List[Question]]] = {
+    "no_repeat": _no_repeat,
+    "expect_cause": _expect_cause,
+    "streak_then": _streak_then,
 }
 
 
-def ask(events: Sequence[Event], *, curiosity: Optional[List[str]] = None) -> List[Question]:
-    """Run the active expectations. ``curiosity`` IS the dial — the list of active question kinds;
-    more active expectations notice more deviations. None = maximally curious (all)."""
-    active = curiosity if curiosity is not None else list(QUESTION_BANK)
-    out: List[Question] = []
-    for kind in active:
-        fn = QUESTION_BANK.get(kind)
-        if fn:
-            out.extend(fn(events))
-    out.sort(key=lambda q: q.about)
-    return out
+class Inquiry:
+    """An inquiry declaration: a list of expectation instances. ``level`` is the curiosity dial —
+    each expectation has an ``at`` level; turn the dial up to activate deeper expectations."""
+
+    def __init__(self, expectations: List[Dict[str, Any]]) -> None:
+        self.expectations = expectations
+
+    @classmethod
+    def from_file(cls, path: str) -> "Inquiry":
+        with open(path, "r", encoding="utf-8") as f:
+            return cls(json.load(f))
+
+    def ask(self, events: Sequence[Event], *, curiosity: int = 99) -> List[Question]:
+        out: List[Question] = []
+        for spec in self.expectations:
+            if spec.get("at", 1) > curiosity:
+                continue
+            fn = EXPECTATION_TYPES.get(spec.get("type"))
+            if fn:
+                out.extend(fn(events, spec))
+        out.sort(key=lambda q: q.about)
+        return out
 
 
 def investigate(events: Sequence[Event], grammar: Grammar, questions: Sequence[Question], *,

@@ -70,6 +70,16 @@ def test_deterministic_replay():
     assert g.narrate(rows) == g.narrate(rows)
 
 
+def test_ordinal_gives_continuity_general():
+    g = Grammar({"form": "{actor} {verb}{object}{magnitude}{coda}"}, {"pit": "pitted"})
+    # carried state -> continuity, domain-agnostic
+    assert g.line({"action": "pit", "actor": "Hadjar", "ordinal": "2"}, key="k") == "Hadjar pitted for the second time."
+    assert g.line({"action": "spike", "actor": "your heart", "ordinal": "3"}, key="k") == "Your heart spiked for the third time."
+    # first time -> no suffix; named counterpart -> suppressed (avoids "overtook Sainz for the 2nd time" ambiguity)
+    assert g.line({"action": "pit", "actor": "X", "ordinal": "1"}, key="k") == "X pitted."
+    assert "time" not in g.line({"action": "overtake", "actor": "X", "object": "Sainz", "ordinal": "5"}, key="k")
+
+
 def test_transform_reads_roles_and_uses_grammar_file():
     t = build_transform("tape_to_speech", grammar="data/grammars/intern.json",
                         verbs="data/english/irregular_verbs.json")

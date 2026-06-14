@@ -5,6 +5,7 @@
   "form": "{opener}{actor} {verb}{object}{magnitude}{coda}",
   "transitions": ["", "Anon, ", "And lo, "],
   "article": true,
+  "reasons": {"fresh_tyres": "On fresh-shod wheels, ", "inherited_lead": "As a rival tarried in the pits, "},
   "codas": {
     "hype": [", hear it well!", " — rejoice!"],
     "alarm": [" — beware!"],

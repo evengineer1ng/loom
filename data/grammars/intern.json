@@ -5,6 +5,7 @@
   "form": "{transition}{actor} {verb}{object}{magnitude}{coda}",
   "transitions": ["", "", "Then ", "And "],
   "article": true,
+  "reasons": {"fresh_tyres": "On fresh tyres, ", "inherited_lead": "With a rival in the pits, "},
   "codas": {
     "hype": ["!", " — big one!", " — huge!"],
     "alarm": ["...", " — uh oh."],

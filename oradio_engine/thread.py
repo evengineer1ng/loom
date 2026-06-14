@@ -69,7 +69,7 @@ def build_edges(events: Sequence[Event], rules: Optional[List[Dict[str, Any]]] =
                     continue
                 if not _within(events, j, i, r.get("within", 9999)):
                     continue
-                cause[i] = (j, r.get("phrase", ""))
+                cause[i] = (j, r.get("reason") or r.get("phrase", ""))  # reason TOKEN (domain); phrasing resolves in the grammar
                 break
             if cause[i]:
                 break
@@ -116,12 +116,16 @@ def weave(events: Sequence[Event], seed: int, grammar: Grammar, *, depth: int = 
     causes, fwds = pull(cause, effect, seed, depth)
     seed_actor = events[seed].get("actor")
 
-    # the immediate cause, if TYPED, folds into a phrase ("On fresh tyres, ...") instead of a clause
+    # the immediate cause, if TYPED, folds into a phrase ("On fresh tyres, ...") instead of a clause.
+    # The reason TOKEN comes from the domain rule; the GRAMMAR phrases it in its own voice. (A literal
+    # phrase in the rule still works as a fallback — backward compatible.)
     lead_phrase = ""
     rendered = list(causes)
     if rendered and rendered[-1][1]:
-        lead_phrase = rendered[-1][1]
-        rendered = rendered[:-1]
+        token = rendered[-1][1]
+        lead_phrase = grammar.reason_phrase(token) or (token if " " in token else "")
+        if lead_phrase:
+            rendered = rendered[:-1]
 
     parts: List[str] = []
     for j, _ph in rendered:

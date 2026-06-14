@@ -1,0 +1,6 @@
+[
+  {"type": "no_repeat", "action": "pit", "within": 4, "at": 1},
+  {"type": "no_repeat", "action": "clock", "within": 3, "at": 2},
+  {"type": "expect_cause", "effect": "clock", "cause": "pit", "within": 6, "at": 2},
+  {"type": "streak_then", "action_a": "overtake", "count": 2, "action_b": "pit", "within": 2, "at": 3}
+]

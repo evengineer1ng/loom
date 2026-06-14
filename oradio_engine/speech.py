@@ -20,7 +20,14 @@ import hashlib
 import json
 from typing import Any, Dict, List, Optional, Sequence
 
-ROLE_KEYS = ("actor", "action", "object", "magnitude", "unit", "valence", "pronoun", "definite")
+ROLE_KEYS = ("actor", "action", "object", "magnitude", "unit", "valence", "pronoun", "definite", "ordinal")
+
+_ORDINALS = {1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth",
+             6: "sixth", 7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth"}
+
+
+def ordinal_word(n: int) -> str:
+    return _ORDINALS.get(int(n), f"{int(n)}th")
 
 # A general English irregular-past table — shared infrastructure, NOT domain-specific.
 # (Extended set lives in data/english/irregular_verbs.json; this is the standalone default.)
@@ -119,7 +126,25 @@ class Grammar:
         self.article = bool(spec.get("article", True))
         self.tense = spec.get("tense", "past")
         self.form = spec.get("form", "{opener}{transition}{actor} {verb}{object}{magnitude}{coda}")
+        self.reasons = spec.get("reasons") or {}   # causal reason-token -> phrasing, in THIS voice
         self.verbs = verbs or _DEFAULT_VERBS
+
+    def reason_phrase(self, token: str) -> str:
+        """How this voice phrases a causal reason token (e.g. 'fresh_tyres'). '' if unknown."""
+        return self.reasons.get(token, "")
+
+    def _ordinal_suffix(self, roles: Dict[str, str]) -> str:
+        """Continuity from carried state: 'for the second time'. General across domains. Skipped
+        when the object is a named counterpart (overtook Sainz), where it would read ambiguously."""
+        o = roles.get("ordinal")
+        obj = roles.get("object", "")
+        if not o or (obj and obj[:1].isupper()):
+            return ""
+        try:
+            n = int(o)
+        except (TypeError, ValueError):
+            return ""
+        return f" for the {ordinal_word(n)} time" if n > 1 else ""
 
     @classmethod
     def from_file(cls, path: str, *, verbs: Optional[str] = None) -> "Grammar":
@@ -170,7 +195,7 @@ class Grammar:
             "actor": actor,
             "verb": self._verb(action),
             "object": self._object_phrase(roles),
-            "magnitude": magnitude,
+            "magnitude": magnitude + self._ordinal_suffix(roles),
             "coda": _pick(self.codas.get(roles.get("valence", ""), self.codas.get("*", [""])), "coda", key),
         }
         text = " ".join(self.form.format_map(_Default(slots)).split()).strip()
@@ -191,6 +216,7 @@ class Grammar:
             unit = roles.get("unit", "")
             number = number_to_words(int(m)) if str(m).isdigit() else m
             core += f" to {number}{(' ' + unit) if unit else ''}"
+        core += self._ordinal_suffix(roles)
         return " ".join(core.split()).strip()
 
     def narrate(self, role_seq: Sequence[Dict[str, str]]) -> List[str]:

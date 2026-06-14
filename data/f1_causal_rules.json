@@ -1,4 +1,4 @@
 [
-  {"cause": "pit", "effect": "clock", "within": 6, "same_actor": true, "phrase": "On fresh tyres, "},
-  {"cause": "pit", "effect": "seize", "within": 3, "cross_actor": true, "phrase": "With a rival in the pits, "}
+  {"cause": "pit", "effect": "clock", "within": 6, "same_actor": true, "reason": "fresh_tyres"},
+  {"cause": "pit", "effect": "seize", "within": 3, "cross_actor": true, "reason": "inherited_lead"}
 ]

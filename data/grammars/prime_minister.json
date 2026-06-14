@@ -5,6 +5,7 @@
   "form": "{opener}{actor} {verb}{object}{magnitude}{coda}",
   "transitions": ["", "Furthermore, ", "I would add that "],
   "article": true,
+  "reasons": {"fresh_tyres": "Following a tyre change, ", "inherited_lead": "As a rival pitted, "},
   "codas": {
     "hype": ["."],
     "alarm": [" — a matter we are monitoring closely."],
