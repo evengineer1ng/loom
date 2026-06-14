@@ -58,6 +58,12 @@ def test_cohesion_uses_pronoun_for_repeated_actor():
     assert "He " in lines[1] and "Wembanyama" not in lines[1]  # second line pronominalizes
 
 
+def test_proper_noun_object_takes_no_article():
+    g = SpeechGrammar({"overtake": {"past": "overtook"}}, register="plain")
+    assert g.line({"action": "overtake", "actor": "Verstappen", "object": "Norris"}, key="k") == "Verstappen overtook Norris."
+    assert "a backmarker" in g.line({"action": "overtake", "actor": "Verstappen", "object": "backmarker"}, key="k")
+
+
 def test_registered_transform_reads_roles_from_candidate_tags():
     t = build_transform("tape_to_speech", register="plain")  # no lexicon -> falls back to lemma
     c = NormalizedCandidate(post_id="p1", source="court", title="t", body="b", priority=0.5,

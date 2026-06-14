@@ -125,8 +125,12 @@ class SpeechGrammar:
 
         obj = roles.get("object")
         if obj:
-            determiner = "the" if roles.get("definite") == "1" else article(obj)
-            clause += f" {determiner} {obj}"
+            if roles.get("definite") == "1":
+                clause += f" the {obj}"
+            elif obj[:1].isupper():        # proper noun (a name) takes no article
+                clause += f" {obj}"
+            else:
+                clause += f" {article(obj)} {obj}"
 
         magnitude = roles.get("magnitude")
         if magnitude:
