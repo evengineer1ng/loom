@@ -37,3 +37,12 @@ def pytest_runtest_call(item):
         if root in _ORGAN_MODULES:
             pytest.skip(f"organ plugin '{root}' not installed in this club (pre-stock pending)")
         raise
+    except Exception as exc:
+        # the loader now wraps a missing organ's ImportError as MissingPlugin — treat the
+        # same: a pre-stock-pending organ skips, anything else propagates.
+        if type(exc).__name__ == "MissingPlugin":
+            cause = getattr(exc, "__cause__", None)
+            root = (getattr(cause, "name", "") or "").split(".")[0]
+            if root in _ORGAN_MODULES:
+                pytest.skip(f"organ '{getattr(exc, 'kind', '?')}' not installed (pre-stock pending)")
+        raise

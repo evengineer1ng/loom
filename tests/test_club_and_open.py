@@ -84,6 +84,8 @@ def test_open_example_file_powers_on(tmp_path):
     pytest.importorskip("yaml")
     example = os.path.join(os.path.dirname(__file__), "..", "spec", "examples", "motorsport-ladder.oradio")
     result = open_oradio(example, club=_club(tmp_path))
+    if not result.ok and result.report.missing_required:
+        pytest.skip(f"example needs an organ not installed here: {result.report.missing_required}")
     assert result.ok and result.name == "motorsport-ladder"
     result.engine.run(steps=2)  # lens (declared in the file) tames FTB's flood
     assert len(result.engine.bus) <= 40
