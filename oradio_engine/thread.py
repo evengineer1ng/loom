@@ -84,10 +84,24 @@ def build_edges(events: Sequence[Event], rules: Optional[List[Dict[str, Any]]] =
     return cause, effect
 
 
-def pull(cause: List[Edge], effect: List[Edge], seed: int, depth: int
+def _view(e: Event, continuity: bool) -> Event:
+    """Drop carried state (the continuity fader) when the mixer turns continuity down."""
+    if continuity or "ordinal" not in e:
+        return e
+    v = dict(e)
+    v.pop("ordinal", None)
+    return v
+
+
+def pull(cause: List[Edge], effect: List[Edge], seed: int, depth: int, *, flavour: str = "both"
          ) -> Tuple[List[Tuple[int, str]], List[Tuple[int, str]]]:
-    cause_hops = (depth + 1) // 2
-    fwd_hops = depth // 2
+    # flavour = DIRECTION of the pull: chase the cause (back), the consequence (forward), or split.
+    if flavour == "back":
+        cause_hops, fwd_hops = depth, 0
+    elif flavour == "forward":
+        cause_hops, fwd_hops = 0, depth
+    else:
+        cause_hops, fwd_hops = (depth + 1) // 2, depth // 2
     causes: List[Tuple[int, str]] = []
     cur = seed
     for _ in range(cause_hops):
@@ -109,12 +123,16 @@ def pull(cause: List[Edge], effect: List[Edge], seed: int, depth: int
 
 
 def weave(events: Sequence[Event], seed: int, grammar: Grammar, *, depth: int = 0,
+          flavour: str = "both", continuity: bool = True,
           cause: Optional[List[Edge]] = None, effect: Optional[List[Edge]] = None,
           rules: Optional[List[Dict[str, Any]]] = None) -> str:
     if cause is None or effect is None:
         cause, effect = build_edges(events, rules)
-    causes, fwds = pull(cause, effect, seed, depth)
+    causes, fwds = pull(cause, effect, seed, depth, flavour=flavour)
     seed_actor = events[seed].get("actor")
+
+    def cl(i: int, subject: Optional[str] = None) -> str:
+        return grammar.clause(_view(events[i], continuity), subject=subject)
 
     # the immediate cause, if TYPED, folds into a phrase ("On fresh tyres, ...") instead of a clause.
     # The reason TOKEN comes from the domain rule; the GRAMMAR phrases it in its own voice. (A literal
@@ -129,18 +147,18 @@ def weave(events: Sequence[Event], seed: int, grammar: Grammar, *, depth: int = 
 
     parts: List[str] = []
     for j, _ph in rendered:
-        parts.append("After " + grammar.clause(events[j]) + ", ")
+        parts.append("After " + cl(j) + ", ")
 
     seed_subject = None
     if not lead_phrase and rendered and events[rendered[-1][0]].get("actor") == seed_actor:
         seed_subject = events[seed].get("pronoun")
-    parts.append(lead_phrase + grammar.clause(events[seed], subject=seed_subject))
+    parts.append(lead_phrase + cl(seed, subject=seed_subject))
 
     last_actor = seed_actor
     for k, _ph in fwds:
         e = events[k]
         subject = e.get("pronoun") if (e.get("actor") == last_actor and e.get("pronoun")) else None
-        parts.append(", and then " + grammar.clause(e, subject=subject))
+        parts.append(", and then " + cl(k, subject=subject))
         last_actor = e.get("actor")
 
     text = _capitalize_sentences("".join(parts).strip())
@@ -150,8 +168,8 @@ def weave(events: Sequence[Event], seed: int, grammar: Grammar, *, depth: int = 
 
 
 def narrate_salient(events: Sequence[Event], grammar: Grammar, *, depth: int = 2,
-                    rules: Optional[List[Dict[str, Any]]] = None, min_priority: float = 0.7
-                    ) -> List[Tuple[Any, str]]:
+                    rules: Optional[List[Dict[str, Any]]] = None, min_priority: float = 0.7,
+                    flavour: str = "both", continuity: bool = True) -> List[Tuple[Any, str]]:
     """Thread only the salient seeds; mark consumed events so nothing is told twice. Returns
     (lap, line) pairs — the flat tape becomes a few traced stories."""
     cause, effect = build_edges(events, rules)
@@ -160,8 +178,9 @@ def narrate_salient(events: Sequence[Event], grammar: Grammar, *, depth: int = 2
     for i, e in enumerate(events):
         if float(e.get("priority", 0)) < min_priority or i in consumed:
             continue
-        causes, fwds = pull(cause, effect, i, depth)
-        out.append((e.get("lap"), weave(events, i, grammar, depth=depth, cause=cause, effect=effect)))
+        causes, fwds = pull(cause, effect, i, depth, flavour=flavour)
+        out.append((e.get("lap"), weave(events, i, grammar, depth=depth, flavour=flavour,
+                                        continuity=continuity, cause=cause, effect=effect)))
         consumed.add(i)
         for j, _ in causes:
             consumed.add(j)
