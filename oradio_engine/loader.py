@@ -19,12 +19,49 @@ from oradio_engine.dipole import DipoleMeter
 from oradio_engine.evidence import EvidenceService
 from oradio_engine.federation import Clock, FederationEngine
 from oradio_engine.lens import LensedOrgan, build_lens
+from oradio_engine.plugins import MissingPlugin, PluginRef, PluginResolver, load_plugin
 from oradio_engine.registry import build_organ, build_source
 
+# keys in a world/telemetry block that are *resolution* metadata, not build params.
+# 'plugin' is the fetch coordinate (github:owner/repo) — a dedicated key so it never
+# collides with a telemetry block's own 'source' (which names the kind).
+_RESOLUTION_KEYS = {"plugin", "ref", "sha256"}
 
-def load_oradio(spec: Union[OradioDescriptor, Dict[str, Any]]) -> FederationEngine:
-    """Decode a descriptor (or raw dict) into a runnable ``FederationEngine``."""
+
+def _resolve_build(builder, kind: str, name: str, params: Dict[str, Any], resolver) -> Any:
+    """Build a kind; if its backend is missing, fetch the declared plugin and retry.
+
+    Local/pre-stocked kinds build directly. An unknown/uninstalled kind that declares a
+    ``source`` (github:owner/repo) is fetched, hash-verified, registered, then built. One
+    that declares no source raises ``MissingPlugin`` — a calm "you're missing X", never a
+    raw traceback in the user's face.
+    """
+    build_params = {k: v for k, v in params.items() if k not in _RESOLUTION_KEYS}
+    try:
+        return builder(kind, name, **build_params)
+    except (KeyError, ImportError) as exc:
+        ref = PluginRef.parse(kind, {
+            "source": params.get("plugin"),         # descriptor key 'plugin' = the coordinate
+            "ref": params.get("ref", "main"),
+            "sha256": params.get("sha256"),
+        })
+        if ref.is_external and resolver is not None:
+            resolved = resolver.resolve(ref)        # fetch + sha256 verify + cache
+            if resolved is not None:
+                load_plugin(resolved)               # import + register its kind
+                return builder(kind, name, **build_params)
+        raise MissingPlugin(name=name, kind=kind, source=params.get("plugin")) from exc
+
+
+def load_oradio(spec: Union[OradioDescriptor, Dict[str, Any]], *, resolver=None) -> FederationEngine:
+    """Decode a descriptor (or raw dict) into a runnable ``FederationEngine``.
+
+    Worlds/sources whose plugin isn't installed are fetched from their declared ``source``
+    (see ``oradio_engine.plugins``); one with no source raises ``MissingPlugin`` so callers
+    can report it gracefully instead of crashing.
+    """
     desc = spec if isinstance(spec, OradioDescriptor) else OradioDescriptor.from_dict(spec)
+    resolver = resolver or PluginResolver()
     lens = build_lens(desc.lens)
     eng = FederationEngine(
         clock=Clock(),
@@ -33,11 +70,11 @@ def load_oradio(spec: Union[OradioDescriptor, Dict[str, Any]]) -> FederationEngi
     )
 
     for w in desc.worlds:
-        organ = build_organ(w.organ, w.name, **w.params)
+        organ = _resolve_build(build_organ, w.organ, w.name, w.params, resolver)
         eng.register(LensedOrgan(organ, lens))
 
     for t in desc.telemetry:
-        source = build_source(t.source, t.name, **t.params)
+        source = _resolve_build(build_source, t.source, t.name, t.params, resolver)
         eng.register(LensedOrgan(source, lens))
 
     for e in desc.effectors:
@@ -121,5 +158,12 @@ def open_oradio(spec, *, club: Optional[Club] = None, gate: bool = True,
     if gate and not report.ready:
         return OpenResult(desc.name, False, None, report, desc, manifest, withheld)
 
-    engine = load_oradio(desc)
+    # 3) build — fetching any declared external plugins; a missing one degrades to a calm
+    #    report instead of a crash (the foreign-file UX: "you're missing X", never a traceback).
+    try:
+        engine = load_oradio(desc)
+    except MissingPlugin as missing:
+        report.ready = False
+        report.missing_required.append(str(missing))
+        return OpenResult(desc.name, False, None, report, desc, manifest, withheld)
     return OpenResult(desc.name, True, engine, report, desc, manifest, withheld)
