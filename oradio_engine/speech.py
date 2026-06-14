@@ -180,6 +180,19 @@ class Grammar:
             text += "."
         return text
 
+    def clause(self, roles: Dict[str, str], *, subject: Optional[str] = None) -> str:
+        """A bare clause for weaving into a thread — no opener/transition/coda/terminal period."""
+        if not roles.get("action"):
+            return ""
+        actor = subject if subject is not None else roles.get("actor", "")
+        core = f"{actor} {self._verb(roles['action'])}{self._object_phrase(roles)}"
+        m = roles.get("magnitude")
+        if m:
+            unit = roles.get("unit", "")
+            number = number_to_words(int(m)) if str(m).isdigit() else m
+            core += f" to {number}{(' ' + unit) if unit else ''}"
+        return " ".join(core.split()).strip()
+
     def narrate(self, role_seq: Sequence[Dict[str, str]]) -> List[str]:
         out: List[str] = []
         prev: Optional[Dict[str, str]] = None

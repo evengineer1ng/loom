@@ -104,15 +104,13 @@ def main() -> None:
             f"{nm(s['drv'])} takes the fastest lap", 0.85,
             ["f1", f"lap:{lap}", "actor:" + nm(s["drv"]), "action:clock", "object:fastest_lap", "definite:1", "valence:hype"])))
 
-    # pit stops — only the front-runners' stops are worth a call (strategy at the sharp end);
-    # a backmarker's routine stop is noise.
+    # pit stops — keep ALL of them as low-salience thread MATERIAL (a pit is the cause behind a
+    # fresh-tyre fastest lap or an inherited lead). The threaded transcript seeds on the big
+    # moments and pulls these in as causes; a flat reader can filter them out by priority.
     for _, row in laps[laps["PitInTime"].notna()].iterrows():
-        pos = row["Position"]
-        if not (pos == pos and int(pos) <= 6):
-            continue
         lap = int(row["LapNumber"])
-        events.append((lap, 0.55, _row(
-            f"{nm(row['Driver'])} pits from P{int(pos)}", 0.55,
+        events.append((lap, 0.45, _row(
+            f"{nm(row['Driver'])} pits", 0.45,
             ["f1", f"lap:{lap}", "actor:" + nm(row["Driver"]), "action:pit"])))
 
     events.sort(key=lambda e: (e[0], -e[1]))
