@@ -60,6 +60,11 @@ class LiveNarrator:
             e = self.events[idx]
             if idx in self.consumed or float(e.get("priority", 0)) < mixer.salience:
                 continue
+            if not e.get("action"):
+                # a raw headline (e.g. RSS) — no roles to thread; speak it verbatim
+                self.consumed.add(idx)
+                body = e.get("body") or e.get("title") or ""
+                return (e.get("lap"), body) if body.strip() else self.step(grammar, mixer)
             line = weave(self.events, idx, grammar, depth=mixer.depth, flavour=mixer.flavour,
                          continuity=mixer.continuity, cause=self.cause, effect=self.effect)
             causes, fwds = pull(self.cause, self.effect, idx, mixer.depth, flavour=mixer.flavour)
