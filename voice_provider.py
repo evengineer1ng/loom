@@ -428,6 +428,54 @@ class AzureSpeechProvider(VoiceProvider):
                 pass
 
 
+class SapiProvider(VoiceProvider):
+    """Windows SAPI5 TTS — zero-install, multiple distinct built-in voices (David / Hazel /
+    Zira …). Renders text to a temp WAV via PowerShell System.Speech, then loads it as audio.
+    ``voice_map`` maps a voice_key (e.g. "pa", "inner") to an installed SAPI voice NAME."""
+
+    DEFAULT_VOICE = "Microsoft David Desktop"
+
+    @staticmethod
+    def installed_voices() -> list:
+        import subprocess
+        ps = ("Add-Type -AssemblyName System.Speech;"
+              "(New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices()"
+              " | ForEach-Object { $_.VoiceInfo.Name }")
+        try:
+            out = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps],
+                                 capture_output=True, text=True, timeout=15)
+            return [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
+        except Exception:
+            return []
+
+    def synthesize(self, voice_key: str, text: str, voice_map: Dict[str, str]) -> Tuple[np.ndarray, int]:
+        import base64, os, subprocess, tempfile
+        import soundfile as sf
+
+        voice = voice_map.get(voice_key) or voice_map.get("host") or self.DEFAULT_VOICE
+        wav_path = tempfile.mktemp(suffix=".wav")
+        # base64 the text so arbitrary quotes/unicode survive the PowerShell boundary intact.
+        b64 = base64.b64encode((text or "").encode("utf-8")).decode("ascii")
+        ps = (
+            "Add-Type -AssemblyName System.Speech;"
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+            f"try {{ $s.SelectVoice('{voice}') }} catch {{}};"
+            f"$t = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}'));"
+            f"$s.SetOutputToWaveFile('{wav_path}');"
+            "$s.Speak($t); $s.Dispose();"
+        )
+        try:
+            subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, timeout=60, check=True)
+            audio, sample_rate = sf.read(wav_path, dtype="float32")
+            return audio, sample_rate
+        finally:
+            try:
+                os.remove(wav_path)
+            except OSError:
+                pass
+
+
 def get_voice_provider(cfg: Dict[str, Any], audio_cfg: Optional[Dict[str, Any]] = None) -> VoiceProvider:
     """
     Factory function to instantiate the correct voice provider.
@@ -453,6 +501,9 @@ def get_voice_provider(cfg: Dict[str, Any], audio_cfg: Optional[Dict[str, Any]] 
     provider_type = (audio_cfg.get("voices_provider") or "piper").strip().lower()
 
     # Local providers
+    if provider_type in ("sapi", "windows"):
+        return SapiProvider()
+
     if provider_type == "piper":
         piper_bin = (audio_cfg.get("piper_bin") or "").strip()
         if not piper_bin:

@@ -89,10 +89,87 @@ def _action_to_button(**_) -> Transform:
     return lambda c: {"button": c.title} if c.type == "action" else None
 
 
+def _play_to_call(**_) -> Transform:
+    # The DETERMINISTIC half: a play row becomes a flat PA call spoken verbatim. The play
+    # text already carries no running score, so the call ("Made Three Point Jumper ...")
+    # narrates the moment without spelling the result ahead of itself.
+    return lambda c: {"text": c.body} if c.type == "play" else None
+
+
+def _strip_think(text: str) -> str:
+    """Remove <think>…</think> reasoning blocks (qwen3/r1 emit them by default) and stray
+    open tags, so only the spoken monologue survives."""
+    import re
+    text = re.sub(r"(?is)<think>.*?</think>", "", text)
+    text = re.sub(r"(?is)<think>.*", "", text)        # unterminated (truncated) block
+    return text.strip()
+
+
+def _play_to_mindset(
+    intent: str = "",
+    endpoint: str = "",
+    model: str = "",
+    temperature: float = 0.85,
+    num_predict: int = 120,
+    think: bool = False,
+    **_,
+) -> Transform:
+    """The LIVE half: each play becomes an interior reaction *about* that moment.
+
+    This is the seam where the universe prompt (carried into the descriptor as ``intent``)
+    finally does real work and the LLM finally has a job: given the play that just happened
+    and the register the author asked for, voice one mind in the arena. The deterministic
+    play spine and this generated interiority coexist on one bus — the two determinism
+    classes, audible together.
+
+    Talks to an Ollama ``/api/generate`` endpoint. ``num_predict`` keeps interiors short (a
+    line or two, fast); ``think=False`` + ``_strip_think`` keep reasoning models' scratchpad
+    out of the spoken line. With no ``endpoint`` it degrades to a clearly-marked placeholder
+    so the wiring runs end-to-end before an LLM is attached. The HTTP call is lazy stdlib
+    (``urllib``) — ``import oradio_engine`` stays pure.
+    """
+
+    def _generate(moment: str) -> str:
+        if not endpoint:
+            return f"(interior — awaiting llm) on: {moment}"
+        try:
+            import json as _json
+            import urllib.request as _urllib
+            prompt = (
+                f"{intent}\n\nThe moment in the game: {moment}\n\n"
+                "Voice ONE short interior reaction from a single mind in the arena — a player, "
+                "a coach, or a fan. Their thought, the vibe, NOT what they said aloud. No "
+                "preamble, no quotation marks. 1-2 sentences."
+            )
+            body = {
+                "model": model or "llama3.1:8b",
+                "prompt": prompt,
+                "stream": False,
+                "think": think,
+                "options": {"temperature": temperature, "num_predict": num_predict},
+            }
+            payload = _json.dumps(body).encode("utf-8")
+            req = _urllib.Request(endpoint, data=payload, headers={"Content-Type": "application/json"})
+            resp = _json.load(_urllib.urlopen(req, timeout=60))
+            out = _strip_think(str(resp.get("response") or resp.get("text") or ""))
+            return out or f"(interior) on: {moment}"
+        except Exception as exc:
+            return f"(interior — llm unreachable: {type(exc).__name__}) on: {moment}"
+
+    def t(c: NormalizedCandidate) -> Optional[Dict[str, Any]]:
+        if c.type != "play":
+            return None
+        return {"text": _generate(c.body)}
+
+    return t
+
+
 register_transform("presence_to_signal", _presence_to_signal)
 register_transform("presence_to_speech", _presence_to_speech)
 register_transform("frame_to_observation", _frame_to_observation)
 register_transform("action_to_button", _action_to_button)
+register_transform("play_to_call", _play_to_call)        # deterministic PA call (verbatim)
+register_transform("play_to_mindset", _play_to_mindset)  # live interior monologue (LLM)
 
 
 # --------------------------------------------------------------------------- #

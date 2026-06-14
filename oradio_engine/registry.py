@@ -105,6 +105,11 @@ def _video_capture_sim(name: str, *, frames: list | None = None, **_):
     return make_simulated_capture(name, frames=frames)
 
 
+def _basketball_pbp(name: str, *, path: str | None = None, plays: list | None = None, per_poll: int = 1, **_):
+    from oradio_engine.shims.basketball_shim import make_basketball_pbp
+    return make_basketball_pbp(name, path=path, plays=plays, per_poll=per_poll)
+
+
 def _pc_telemetry(name: str, **_):
     # STUB (sensitive): the real adapter reads OS resource/activity metrics. Simulated for now.
     from oradio_engine.live import LiveFeedOrgan, ScriptedSource
@@ -126,6 +131,7 @@ def _ring_telemetry(name: str, **_):
 # benign (simulated / public) — no consent needed
 register_source("simulated_spatial_array", _simulated_spatial_array)
 register_source("video_capture_sim", _video_capture_sim)
+register_source("basketball_pbp", _basketball_pbp)  # public sports event log; benign, replay-only
 # sensitive — touch personal endpoints; the Club must get consent first
 register_source("atl_league", _atl_league, sensitive=True, reads="a local league.sqlite (your research/trading data)")
 register_source("moco", _moco, sensitive=True, reads="your motion/pose telemetry (MoCo classifier output)")

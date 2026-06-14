@@ -28,17 +28,22 @@ import provisioning
 from oradio_engine import (
     Club,
     NormalizedCandidate,
-    VideoLoop,
     VisualTapeLog,
     candidate_to_visual_events,
     descriptor_visual_families,
     open_oradio,
-    render_visual_frame,
-    thumbnail_sidecar_path,
     truth_to_visual_events,
+)
+# PIL-dependent rasterization lives in visual_thumbnail (an ENDPOINT), NOT the pure decoder
+# core — see oradio_engine/__init__.py. The player is an endpoint, so it imports them here.
+from oradio_engine.visual_thumbnail import (
+    VideoLoop,
+    render_visual_frame,
+    resolve_media_path,
+    thumbnail_sidecar_path,
+    visual_config,
     write_visual_thumbnail,
 )
-from oradio_engine.visual_thumbnail import resolve_media_path, visual_config
 from loom_narration import Narrator
 from voice_provider import get_voice_provider
 
@@ -121,6 +126,8 @@ class VoiceSpeaker:
         self.index = 0
         self.provider = None
         self.last_error = ""
+        self._queue = None
+        self._worker_started = False
 
         if self.provider_name == "none":
             return
@@ -156,22 +163,38 @@ class VoiceSpeaker:
         self.index += 1
         return key
 
-    def speak_async(self, text: str) -> None:
-        if not self.provider or not text.strip():
+    def _ensure_worker(self) -> None:
+        if self._worker_started:
             return
+        import queue
+        self._queue = queue.Queue()
+        self._worker_started = True
+        threading.Thread(target=self._worker, daemon=True).start()
 
-        voice_key = self.next_voice()
-
-        def work() -> None:
+    def _worker(self) -> None:
+        # One worker drains the queue and plays BLOCKING, so a play-by-play call and the
+        # interior monologue that answers it are heard in order, never on top of each other.
+        import sounddevice as sd
+        while True:
+            voice_key, text = self._queue.get()
             try:
                 audio, sample_rate = self.provider.synthesize(voice_key, text, self.assignments)
-                import sounddevice as sd
-
-                sd.play(audio, sample_rate, blocking=False)
+                sd.play(audio, sample_rate, blocking=True)
             except Exception as exc:
                 self.last_error = str(exc)
+            finally:
+                self._queue.task_done()
 
-        threading.Thread(target=work, daemon=True).start()
+    def speak(self, voice_key: str, text: str) -> None:
+        """Enqueue a line in a specific voice (voice_key resolved via assignments)."""
+        if not self.provider or not text.strip():
+            return
+        self._ensure_worker()
+        self._queue.put((voice_key, text))
+
+    def speak_async(self, text: str) -> None:
+        # Fallback for descriptors without named voice effectors: rotate through assigned voices.
+        self.speak(self.next_voice(), text)
 
 
 class LoomPlayerApp:
@@ -500,7 +523,16 @@ class LoomPlayerApp:
         self.status_var.set(f"{top.source} / {top.type}")
         self.now_var.set(f"tick {self.engine.clock.tick}")
 
-        if self.voice.ready and top.post_id != self.last_spoken_post_id:
+        # Voice-effector beats (e.g. pa, inner) each speak in their OWN voice, in bus order
+        # (the call before the interior). Descriptors with no such effectors fall back to
+        # narrating the top beat through the rotating voice.
+        spoken = [c for c in produced if c.type == "spoken"]
+        if self.voice.ready and spoken:
+            for c in spoken:
+                self.voice.speak(c.source, c.body)
+                self.last_spoken_post_id = c.post_id
+            self.voice_var.set(self._voice_summary())
+        elif self.voice.ready and top.post_id != self.last_spoken_post_id:
             self.last_spoken_post_id = top.post_id
             self.voice.speak_async(line)
             self.voice_var.set(self._voice_summary())
