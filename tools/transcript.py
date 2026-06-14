@@ -50,6 +50,8 @@ def main() -> None:
         # then advance current_lap from this tick's source rows.
         for c in produced:
             if c.type == "spoken":
+                if lines and lines[-1].split("] ", 1)[-1] == c.body:
+                    continue  # guard against a back-to-back identical line
                 prefix = f"[lap {current_lap}] " if current_lap else ""
                 lines.append(f"{prefix}{c.body}")
         for c in produced:

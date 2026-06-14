@@ -19,9 +19,8 @@ bindings:
   to: commentator
   transform: tape_to_speech
   name: call
-  lexicon: data/lexicon_f1.json
-  register: hype
-  mode: radio
+  grammar: data/grammars/intern.json
+  verbs: data/english/irregular_verbs.json
 voice:
   provider: sapi
   assignments:

@@ -1,16 +1,16 @@
-"""The deterministic speech kernel — domain-agnostic, no ML, repeatable."""
+"""The speech engine — domain (rows) and grammar (style) are separate; no domain words here."""
 
 from __future__ import annotations
 
 from oradio_engine.binding import build_transform
 from oradio_engine.contract import NormalizedCandidate
-from oradio_engine.speech import SpeechGrammar, number_to_words, roles_from_tags
+from oradio_engine.speech import Grammar, number_to_words, regular_past, roles_from_tags
 
-LEX = {
-    "make": {"past": "made", "register": {"plain": ["made"], "hype": ["drilled", "buried"]}},
-    "rise": {"past": "rose", "register": {"plain": ["rose"], "poetic": ["lifted like a tide"]}},
-    "rebound": {"past": "rebounded", "register": {"plain": ["grabbed"]}},
-}
+VERBS = {"overtake": "overtook", "rise": "rose"}
+INTERN = {"form": "{transition}{actor} {verb}{object}{magnitude}{coda}",
+          "transitions": ["", ""], "codas": {"*": ["."], "hype": ["!"]}}
+CRIER = {"opener": "Hear ye! ", "form": "{opener}{actor} {verb}{object}{magnitude}{coda}",
+         "codas": {"*": ["."]}}
 
 
 def test_number_to_words():
@@ -19,56 +19,62 @@ def test_number_to_words():
     assert number_to_words(118) == "one hundred eighteen"
 
 
+def test_regular_past_fallback():
+    assert regular_past("clock") == "clocked"
+    assert regular_past("settle") == "settled"
+
+
 def test_roles_from_tags_is_contract_safe_channel():
-    tags = ["nba", "actor:Towns", "action:make", "object:three", "valence:hype", "junk"]
-    roles = roles_from_tags(tags)
-    assert roles == {"actor": "Towns", "action": "make", "object": "three", "valence": "hype"}
+    roles = roles_from_tags(["nba", "actor:Towns", "action:make", "object:three", "junk"])
+    assert roles == {"actor": "Towns", "action": "make", "object": "three"}
 
 
-def test_same_code_speaks_two_domains():
-    g = SpeechGrammar(LEX, register="plain")
-    hoops = g.line({"action": "make", "actor": "Towns", "object": "three"}, key="b1")
-    bio = g.line({"action": "rise", "actor": "your heart", "magnitude": "118", "unit": "bpm"}, key="r1")
-    assert hoops == "Towns made a three."
-    assert bio == "Your heart rose to one hundred eighteen bpm."  # zero domain code between them
+def test_one_grammar_speaks_two_domains():
+    g = Grammar(INTERN, VERBS)  # ONE grammar, zero domain code below
+    assert g.line({"action": "overtake", "actor": "Verstappen", "object": "Norris"}, key="a") == "Verstappen overtook Norris."
+    assert g.line({"action": "rise", "actor": "your heart", "magnitude": "118", "unit": "bpm"}, key="b") == "Your heart rose to one hundred eighteen bpm."
 
 
-def test_register_changes_word_choice():
-    plain = SpeechGrammar(LEX, register="plain").line({"action": "make", "actor": "Towns", "object": "three"}, key="k")
-    hype = SpeechGrammar(LEX, register="hype").line({"action": "make", "actor": "Towns", "object": "three"}, key="k")
-    assert plain != hype
-    assert any(w in hype for w in ("drilled", "buried"))
+def test_swapping_grammar_revoices_the_same_row():
+    row = {"action": "overtake", "actor": "Verstappen", "object": "Norris", "valence": "hype"}
+    intern = Grammar(INTERN, VERBS).line(row, key="k")
+    crier = Grammar(CRIER, VERBS).line(row, key="k")
+    assert intern != crier
+    assert crier.startswith("Hear ye!")
 
 
-def test_deterministic_replay():
-    g = SpeechGrammar(LEX, register="hype")
-    rows = [{"action": "make", "actor": "Towns", "object": "three", "_key": "x"},
-            {"action": "make", "actor": "Towns", "object": "layup", "_key": "y"}]
-    assert g.narrate(rows) == g.narrate(rows)  # byte-identical, no RNG drift
+def test_no_domain_lexicon_general_table_then_regular_fallback():
+    g = Grammar({"form": "{actor} {verb}{object}"}, {"overtake": "overtook"})
+    assert g.line({"action": "overtake", "actor": "X", "object": "Y"}, key="k") == "X overtook Y."
+    assert g.line({"action": "clock", "actor": "X", "object": "a lap"}, key="k").startswith("X clocked")  # regular
+
+
+def test_proper_noun_no_article_common_gets_article():
+    g = Grammar({"form": "{actor} {verb}{object}"}, {"overtake": "overtook"})
+    assert g.line({"action": "overtake", "actor": "X", "object": "Norris"}, key="k") == "X overtook Norris."
+    assert "a backmarker" in g.line({"action": "overtake", "actor": "X", "object": "backmarker"}, key="k")
 
 
 def test_cohesion_uses_pronoun_for_repeated_actor():
-    g = SpeechGrammar(LEX, register="plain")
-    rows = [
-        {"action": "make", "actor": "Wembanyama", "object": "jumper", "pronoun": "he", "_key": "1"},
-        {"action": "rebound", "actor": "Wembanyama", "object": "board", "pronoun": "he", "_key": "2"},
-    ]
+    g = Grammar({"form": "{actor} {verb}{object}"}, {})
+    rows = [{"action": "rebound", "actor": "Wembanyama", "object": "board", "pronoun": "he", "_key": "1"},
+            {"action": "rebound", "actor": "Wembanyama", "object": "board", "pronoun": "he", "_key": "2"}]
     lines = g.narrate(rows)
     assert lines[0].startswith("Wembanyama")
-    assert "He " in lines[1] and "Wembanyama" not in lines[1]  # second line pronominalizes
+    assert lines[1].startswith("He") and "Wembanyama" not in lines[1]
 
 
-def test_proper_noun_object_takes_no_article():
-    g = SpeechGrammar({"overtake": {"past": "overtook"}}, register="plain")
-    assert g.line({"action": "overtake", "actor": "Verstappen", "object": "Norris"}, key="k") == "Verstappen overtook Norris."
-    assert "a backmarker" in g.line({"action": "overtake", "actor": "Verstappen", "object": "backmarker"}, key="k")
+def test_deterministic_replay():
+    g = Grammar(INTERN, VERBS)
+    rows = [{"action": "overtake", "actor": "A", "object": "B", "valence": "hype", "_key": "1"}]
+    assert g.narrate(rows) == g.narrate(rows)
 
 
-def test_registered_transform_reads_roles_from_candidate_tags():
-    t = build_transform("tape_to_speech", register="plain")  # no lexicon -> falls back to lemma
-    c = NormalizedCandidate(post_id="p1", source="court", title="t", body="b", priority=0.5,
-                            ts=1.0, type="play", tags=("actor:Towns", "action:rebound", "object:board"))
+def test_transform_reads_roles_and_uses_grammar_file():
+    t = build_transform("tape_to_speech", grammar="data/grammars/intern.json",
+                        verbs="data/english/irregular_verbs.json")
+    c = NormalizedCandidate("p", "court", "", "", 0.5, 1.0, "f1",
+                            ("actor:Verstappen", "action:overtake", "object:Norris"))
     out = t(c)
-    assert out is not None and out["text"] == "Towns rebounded a board."
-    # a row with no action role produces nothing to say
-    assert t(NormalizedCandidate("p2", "court", "t", "b", 0.5, 1.0, "play", ("nba",))) is None
+    assert out and out["text"].startswith("Verstappen overtook Norris")
+    assert t(NormalizedCandidate("p2", "court", "", "", 0.5, 1.0, "f1", ("nba",))) is None

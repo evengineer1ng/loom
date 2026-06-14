@@ -61,32 +61,59 @@ def main() -> None:
                 frame[row["Driver"]] = int(pos)
         frames.append(frame)
 
+    # which (driver, lap) involved a pit in/out — so we can reject pit-cycle "overtakes"
+    pitted = set()
+    for _, row in laps.iterrows():
+        if row["PitInTime"] == row["PitInTime"] or row["PitOutTime"] == row["PitOutTime"]:
+            pitted.add((row["Driver"], int(row["LapNumber"])))
+
+    def pit_related(drv, lap) -> bool:
+        return (drv, lap) in pitted or (drv, lap - 1) in pitted
+
     events = []  # (lap, priority, row)
+    # SELECTION happens here (content determination): reject pit shuffles, keep battles near the
+    # points, and promote lead changes. The narrator only ever sees what's worth saying.
     for step, gainer, loser in overtakes(frames):
         lap = step + 1
+        if pit_related(gainer, lap) or pit_related(loser, lap):
+            continue  # not an on-track pass — a pit cycle swapped them
+        new_pos = frames[step].get(gainer)
+        was_leading = frames[step - 1].get(loser) == 1
+        if was_leading and new_pos == 1:                       # the lead changed hands on track
+            events.append((lap, 0.97, _row(
+                f"{nm(gainer)} takes the lead from {nm(loser)}", 0.97,
+                ["f1", f"lap:{lap}", "actor:" + nm(gainer), "action:seize", "object:lead", "definite:1", "valence:hype"])))
+            continue
+        if new_pos is None or new_pos > 12:                    # ignore backmarker shuffling
+            continue
         events.append((lap, 0.7, _row(
-            f"{nm(gainer)} passes {nm(loser)}", 0.7,
-            ["f1", f"lap:{lap}", "actor:" + nm(gainer), "action:overtake", "object:" + nm(loser), "valence:hype"],
-        )))
+            f"{nm(gainer)} passes {nm(loser)} for P{new_pos}", 0.7,
+            ["f1", f"lap:{lap}", "actor:" + nm(gainer), "action:overtake", "object:" + nm(loser), "valence:hype"])))
 
-    # fastest laps, chronologically -> each new race-fastest
+    # fastest lap: announce ONLY when the honour changes driver (not every micro-improvement)
     valid = laps[laps["LapTime"].notna() & laps["Time"].notna()].sort_values("Time")
     samples = [{"t": row["LapTime"].total_seconds(), "drv": row["Driver"], "lap": int(row["LapNumber"])}
                for _, row in valid.iterrows()]
+    last_holder = None
     for _, s in running_extrema(samples, "t", mode="min"):
+        if s["drv"] == last_holder:
+            continue
+        last_holder = s["drv"]
         lap = s["lap"]
         events.append((lap, 0.85, _row(
-            f"{nm(s['drv'])} sets the fastest lap", 0.85,
-            ["f1", f"lap:{lap}", "actor:" + nm(s["drv"]), "action:clock", "object:fastest_lap", "definite:1", "valence:hype"],
-        )))
+            f"{nm(s['drv'])} takes the fastest lap", 0.85,
+            ["f1", f"lap:{lap}", "actor:" + nm(s["drv"]), "action:clock", "object:fastest_lap", "definite:1", "valence:hype"])))
 
-    # pit stops
+    # pit stops — only the front-runners' stops are worth a call (strategy at the sharp end);
+    # a backmarker's routine stop is noise.
     for _, row in laps[laps["PitInTime"].notna()].iterrows():
+        pos = row["Position"]
+        if not (pos == pos and int(pos) <= 6):
+            continue
         lap = int(row["LapNumber"])
-        events.append((lap, 0.5, _row(
-            f"{nm(row['Driver'])} pits", 0.5,
-            ["f1", f"lap:{lap}", "actor:" + nm(row["Driver"]), "action:pit"],
-        )))
+        events.append((lap, 0.55, _row(
+            f"{nm(row['Driver'])} pits from P{int(pos)}", 0.55,
+            ["f1", f"lap:{lap}", "actor:" + nm(row["Driver"]), "action:pit"])))
 
     events.sort(key=lambda e: (e[0], -e[1]))
     rows = [e[2] for e in events]

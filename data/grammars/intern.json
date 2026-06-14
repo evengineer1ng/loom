@@ -1,0 +1,14 @@
+{
+  "persona": "intern",
+  "tense": "past",
+  "opener": "",
+  "form": "{transition}{actor} {verb}{object}{magnitude}{coda}",
+  "transitions": ["", "", "Then ", "And "],
+  "article": true,
+  "codas": {
+    "hype": ["!", " — big one!", " — huge!"],
+    "alarm": ["...", " — uh oh."],
+    "calm": ["."],
+    "*": ["."]
+  }
+}

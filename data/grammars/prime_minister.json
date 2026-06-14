@@ -1,0 +1,14 @@
+{
+  "persona": "prime minister",
+  "tense": "past",
+  "opener": "I can report that ",
+  "form": "{opener}{actor} {verb}{object}{magnitude}{coda}",
+  "transitions": ["", "Furthermore, ", "I would add that "],
+  "article": true,
+  "codas": {
+    "hype": ["."],
+    "alarm": [" — a matter we are monitoring closely."],
+    "calm": ["."],
+    "*": ["."]
+  }
+}

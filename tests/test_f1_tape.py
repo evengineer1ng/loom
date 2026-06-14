@@ -23,8 +23,10 @@ def test_tape_replay_emits_rows_in_order():
     assert any("Russell" in t for t in second[0].tags)
 
 
-def test_f1_lexicon_narrates_overtake_and_fastest():
-    t = build_transform("tape_to_speech", lexicon="data/lexicon_f1.json", register="hype")
+def test_grammar_narrates_overtake_and_fastest_no_domain_lexicon():
+    # F1 carries NO style file — a general grammar + the shared English verb table speak it.
+    t = build_transform("tape_to_speech", grammar="data/grammars/intern.json",
+                        verbs="data/english/irregular_verbs.json")
     over = t(NormalizedCandidate("p1", "trackside", "", "", 0.7, 1.0, "f1", tuple(ROWS[0]["tags"])))
     assert over and "Norris" in over["text"] and " a Norris" not in over["text"]
     fast = t(NormalizedCandidate("p2", "trackside", "", "", 0.85, 1.0, "f1", tuple(ROWS[1]["tags"])))

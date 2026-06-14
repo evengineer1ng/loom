@@ -1,17 +1,18 @@
-"""The speech kernel — deterministic, domain-agnostic data-to-text. No ML, no GPU.
+"""The speech engine — applies a GRAMMAR to role rows. No domain words live here.
 
-This is the "rung 4 seed": it turns role-bearing rows into spoken English using a *metadata
-lexicon* (words defined by structure — register pools, tense — not prose) plus grammatical
-realization (articles, number-to-words, light cohesion). The SAME code speaks any domain;
-the domain lives entirely in the rows + the lexicon, never here. Swap the lexicon and the
-role-tags and basketball becomes biometrics-as-poetry with zero code change — that is the
-whole proof.
+Two things stay separate, the way ``.oradio`` (the world) and ``.loom`` (the wish) do:
 
-Roles ride on a candidate's ``tags`` as ``"key:value"`` (actor/action/object/magnitude/
-unit/valence/pronoun/definite), so the frozen NormalizedCandidate contract is untouched.
+  - DOMAIN  = the tape's rows (actor/action/object/magnitude/valence). *What happened.*
+              F1, heart rate, the market. The domain owns its facts and what's salient.
+  - GRAMMAR = *how to say it* — intern, PA, town crier, prime minister. **Domain-agnostic.**
+              A small declaration (data/grammars/*.json) an LLM can author in one shot.
 
-Pure stdlib (json/hashlib) — imported lazily by the ``tape_to_speech`` transform so
-``import oradio_engine`` stays stdlib+PyYAML.
+One general engine; the same grammar speaks any tape, and swapping the grammar re-voices the
+same tape. Verb tense comes from a shared *English* table (general, not domain) with a regular
+fallback — never an F1 file. Pure stdlib (json/hashlib).
+
+Roles ride on a candidate's ``tags`` as ``key:value`` (actor/action/object/magnitude/unit/
+valence/pronoun/definite), so the frozen NormalizedCandidate contract is untouched.
 """
 from __future__ import annotations
 
@@ -21,20 +22,19 @@ from typing import Any, Dict, List, Optional, Sequence
 
 ROLE_KEYS = ("actor", "action", "object", "magnitude", "unit", "valence", "pronoun", "definite")
 
+# A general English irregular-past table — shared infrastructure, NOT domain-specific.
+# (Extended set lives in data/english/irregular_verbs.json; this is the standalone default.)
+_DEFAULT_VERBS: Dict[str, str] = {
+    "overtake": "overtook", "make": "made", "rise": "rose", "take": "took", "seize": "seized",
+    "get": "got", "run": "ran", "hit": "hit", "set": "set", "put": "put", "pit": "pitted",
+    "begin": "began", "build": "built", "fall": "fell", "go": "went", "come": "came",
+    "break": "broke", "catch": "caught", "hold": "held", "lead": "led", "lose": "lost", "win": "won",
+}
+
 _ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
          "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
          "seventeen", "eighteen", "nineteen"]
 _TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
-
-# Deterministic color, keyed by valence — the "vibe" without a model. Each carries its own
-# leading punctuation so it appends cleanly. Chosen per-row by hashing, so it varies yet repeats.
-VALENCE_CODA: Dict[str, List[str]] = {
-    "hype": [" — count it!", ", and the place erupts.", " — are you kidding?"],
-    "alarm": [", and the room tightens.", " — something shifts."],
-    "calm": [", easy as breathing.", ", like nothing at all."],
-    "grit": [", the hard way.", ", no give in it."],
-}
-TRANSITIONS = ["", "", "", "Then, ", "Moments later, ", "Now, ", "And just like that, "]
 
 
 def number_to_words(n: int) -> str:
@@ -58,8 +58,7 @@ def article(word: str) -> str:
 
 
 def regular_past(verb: str) -> str:
-    """Graceful default tense for any verb the lexicon doesn't cover — regular English past.
-    (Irregulars are handled by a lexicon ``past``; this is the floor, not the whole grammar.)"""
+    """Regular-English past for any verb the table doesn't cover — the floor, not the grammar."""
     v = (verb or "").strip()
     if not v:
         return v
@@ -89,67 +88,99 @@ def roles_from_tags(tags: Sequence[str]) -> Dict[str, str]:
     return roles
 
 
-class SpeechGrammar:
-    """Realizes role rows into spoken lines under a register (plain/hype/poetic…) and mode."""
+class _Default(dict):
+    def __missing__(self, key: str) -> str:
+        return ""
 
-    def __init__(self, lexicon: Dict[str, Any], *, register: str = "plain", mode: str = "radio") -> None:
-        self.lex = lexicon or {}
-        self.register = register
-        self.mode = mode
+
+def _capitalize_sentences(s: str) -> str:
+    out: List[str] = []
+    cap = True
+    for ch in s:
+        if cap and ch.isalpha():
+            out.append(ch.upper())
+            cap = False
+        else:
+            out.append(ch)
+        if ch in ".!?":
+            cap = True
+    return "".join(out)
+
+
+class Grammar:
+    """A domain-agnostic speaking style. All flavor is in the spec; none of it is a domain word."""
+
+    def __init__(self, spec: Optional[Dict[str, Any]] = None, verbs: Optional[Dict[str, str]] = None) -> None:
+        spec = spec or {}
+        self.persona = spec.get("persona", "")
+        self.opener = spec.get("opener", "")
+        self.transitions = spec.get("transitions") or [""]
+        self.codas = spec.get("codas") or {"*": [""]}
+        self.article = bool(spec.get("article", True))
+        self.tense = spec.get("tense", "past")
+        self.form = spec.get("form", "{opener}{transition}{actor} {verb}{object}{magnitude}{coda}")
+        self.verbs = verbs or _DEFAULT_VERBS
 
     @classmethod
-    def from_file(cls, path: str, **kw: Any) -> "SpeechGrammar":
+    def from_file(cls, path: str, *, verbs: Optional[str] = None) -> "Grammar":
         with open(path, "r", encoding="utf-8") as f:
-            return cls(json.load(f), **kw)
+            spec = json.load(f)
+        table = None
+        if verbs:
+            with open(verbs, "r", encoding="utf-8") as f:
+                table = json.load(f)
+        return cls(spec, table)
 
-    def _verb(self, action: str, key: Any) -> str:
-        entry = self.lex.get(action, {})
-        registers = entry.get("register", {}) if isinstance(entry, dict) else {}
-        pool = registers.get(self.register) or registers.get("plain") or [entry.get("past") or regular_past(action)]
-        return _pick(pool, action, self.register, key)
+    def _verb(self, lemma: str) -> str:
+        if self.tense == "present":
+            return lemma
+        return self.verbs.get(lemma) or regular_past(lemma)
+
+    def _object_phrase(self, roles: Dict[str, str]) -> str:
+        obj = roles.get("object")
+        if not obj:
+            return ""
+        if roles.get("definite") == "1":
+            return " the " + obj
+        if obj[:1].isupper():          # proper noun -> no article
+            return " " + obj
+        if self.article:
+            return " " + article(obj) + " " + obj
+        return " " + obj
 
     def line(self, roles: Dict[str, str], *, prev_roles: Optional[Dict[str, str]] = None,
              position: int = 0, key: Any = 0) -> str:
-        """Render one role row to a sentence. Returns '' when there is nothing to say."""
         action = roles.get("action")
         if not action:
             return ""
-
         actor = roles.get("actor", "")
-        # light cohesion: same actor as the previous line -> use the pronoun (don't re-name them)
-        subject = actor
         if prev_roles and actor and prev_roles.get("actor") == actor and position > 0 and roles.get("pronoun"):
-            subject = roles["pronoun"]
+            actor = roles["pronoun"]
 
-        clause = f"{subject} {self._verb(action, key)}".strip()
-
-        obj = roles.get("object")
-        if obj:
-            if roles.get("definite") == "1":
-                clause += f" the {obj}"
-            elif obj[:1].isupper():        # proper noun (a name) takes no article
-                clause += f" {obj}"
-            else:
-                clause += f" {article(obj)} {obj}"
-
-        magnitude = roles.get("magnitude")
-        if magnitude:
+        magnitude = ""
+        m = roles.get("magnitude")
+        if m:
             unit = roles.get("unit", "")
-            number = number_to_words(int(magnitude)) if magnitude.isdigit() else magnitude
-            clause += f" to {number}{(' ' + unit) if unit else ''}"
+            number = number_to_words(int(m)) if str(m).isdigit() else m
+            magnitude = f" to {number}{(' ' + unit) if unit else ''}"
 
-        transition = _pick(TRANSITIONS, "trans", self.mode, key, position) if position > 0 else ""
-        coda = _pick(VALENCE_CODA.get(roles.get("valence", ""), [""]), "coda", key)
-
-        text = f"{transition}{clause}{coda}".strip()
-        if text:
-            text = text[0].upper() + text[1:]
+        slots = {
+            "opener": _pick([self.opener, ""], "open", key) if self.opener else "",
+            "transition": _pick(self.transitions, "trans", key, position) if position > 0 else "",
+            "actor": actor,
+            "verb": self._verb(action),
+            "object": self._object_phrase(roles),
+            "magnitude": magnitude,
+            "coda": _pick(self.codas.get(roles.get("valence", ""), self.codas.get("*", [""])), "coda", key),
+        }
+        text = " ".join(self.form.format_map(_Default(slots)).split()).strip()
+        text = _capitalize_sentences(text)
+        # the coda owns terminal punctuation; only add a period if none is present
         if text and not text.endswith((".", "!", "?")):
             text += "."
         return text
 
     def narrate(self, role_seq: Sequence[Dict[str, str]]) -> List[str]:
-        """Speak a whole tape with cohesion across rows."""
         out: List[str] = []
         prev: Optional[Dict[str, str]] = None
         for i, roles in enumerate(role_seq):

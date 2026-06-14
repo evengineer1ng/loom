@@ -89,21 +89,23 @@ def _action_to_button(**_) -> Transform:
     return lambda c: {"button": c.title} if c.type == "action" else None
 
 
-def _tape_to_speech(lexicon: str = "", register: str = "plain", mode: str = "radio", **_) -> Transform:
-    """Domain-agnostic deterministic narration: read the row's roles (from its tags), realize
-    a spoken line via the lexicon + grammar. No basketball, no ML — swap the lexicon and the
-    same transform speaks any tape. See oradio_engine/speech.py (lazy import = pure decoder)."""
-    from oradio_engine.speech import SpeechGrammar, roles_from_tags
+def _tape_to_speech(grammar: str = "", verbs: str = "", **_) -> Transform:
+    """Deterministic narration: read the row's roles (from its tags), speak them in a GRAMMAR.
 
-    grammar = (SpeechGrammar.from_file(lexicon, register=register, mode=mode)
-               if lexicon else SpeechGrammar({}, register=register, mode=mode))
+    The grammar is a small domain-agnostic declaration (data/grammars/*.json) — the *voice*
+    (intern/PA/town crier). The domain lives in the rows, never here. Swap the ``grammar`` file
+    and the same tape is re-voiced; point any tape at the same grammar and it speaks. No domain
+    words. See oradio_engine/speech.py (lazy import keeps the decoder pure)."""
+    from oradio_engine.speech import Grammar, roles_from_tags
+
+    voice = Grammar.from_file(grammar, verbs=verbs or None) if grammar else Grammar()
     state: Dict[str, Any] = {"prev": None, "i": 0}
 
     def t(c: NormalizedCandidate) -> Optional[Dict[str, Any]]:
         roles = roles_from_tags(c.tags)
         if not roles.get("action"):
             return None
-        line = grammar.line(roles, prev_roles=state["prev"], position=state["i"], key=c.post_id)
+        line = voice.line(roles, prev_roles=state["prev"], position=state["i"], key=c.post_id)
         state["prev"] = roles
         state["i"] += 1
         return {"text": line} if line else None

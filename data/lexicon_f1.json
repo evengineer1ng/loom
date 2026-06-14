@@ -1,5 +1,0 @@
-{
-  "overtake": {"pos": "verb", "past": "overtook", "register": {"plain": ["passed", "got by"], "hype": ["swept past", "muscled past", "sliced past"], "poetic": ["slipped by"]}},
-  "clock":    {"pos": "verb", "past": "clocked",  "register": {"plain": ["set", "clocked"], "hype": ["ripped off", "banged in"], "poetic": ["carved out"]}},
-  "pit":      {"pos": "verb", "past": "pitted",   "register": {"plain": ["pitted", "boxed"], "hype": ["dove into the pits"], "poetic": ["peeled into the lane"]}}
-}
