@@ -22,10 +22,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, ROOT)
+from lap_review import review, example_session  # noqa: E402  (same dir)
 DOCS = os.path.normpath(os.path.join(ROOT, "..", "..", "docs"))
 STALE_SECONDS = 6.0  # if state.json is older than this, the game isn't ticking
 
@@ -37,8 +41,36 @@ class Bridge:
         os.makedirs(self.dir, exist_ok=True)
         self.cmd_path = os.path.join(self.dir, "command.txt")
         self.state_path = os.path.join(self.dir, "state.json")
+        self.sessions_dir = os.path.join(mod_dir, "telemetry", "sessions") if mod_dir else ""
         self.live = bool(mod_dir)
         self.seq = 0
+
+    def list_sessions(self) -> list:
+        out = []
+        if self.sessions_dir and os.path.isdir(self.sessions_dir):
+            for fn in sorted(os.listdir(self.sessions_dir), reverse=True):
+                if not fn.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(self.sessions_dir, fn), encoding="utf-8") as f:
+                        d = json.load(f)
+                    out.append({"id": fn[:-5], "route": d.get("routeDisplayName") or d.get("routeId") or fn,
+                                "best": d.get("bestLap")})
+                except (OSError, json.JSONDecodeError, ValueError):
+                    pass
+        out.append({"id": "example", "route": "Watson Northside Loop (demo)", "best": 102.4})
+        return out
+
+    def review_session(self, sid: str) -> dict:
+        if sid and sid != "example" and self.sessions_dir:
+            fp = os.path.normpath(os.path.join(self.sessions_dir, sid + ".json"))
+            if fp.startswith(os.path.normpath(self.sessions_dir)) and os.path.isfile(fp):
+                try:
+                    with open(fp, encoding="utf-8") as f:
+                        return review(json.load(f))
+                except (OSError, json.JSONDecodeError, ValueError):
+                    pass
+        return review(example_session())
 
     def send(self, intent: str, args: str = "") -> int:
         self.seq += 1
@@ -76,6 +108,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"ok": True, "mode": "live" if BR.live else "replay", "seq": BR.seq}))
         if path.startswith("/state"):
             return self._send(200, json.dumps(BR.read_state()))
+        if path.startswith("/sessions"):
+            return self._send(200, json.dumps(BR.list_sessions()))
+        if path.startswith("/session"):
+            sid = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("id", [""])[0]
+            return self._send(200, json.dumps(BR.review_session(sid)))
         # static (the portal + anything else under docs/)
         rel = "ncm.html" if path in ("/", "") else path.lstrip("/")
         fp = os.path.normpath(os.path.join(DOCS, rel))

@@ -60,6 +60,16 @@
      <h2>The Paddock</h2>
      <div class=feed id=feed></div>
    </div>
+
+   <div class=deck style="grid-column:1/-1">
+     <h2>Lap Review · Engineer's Debrief</h2>
+     <div class=row style="margin:0 0 8px"><label style="color:var(--mut);font-size:12px">session
+       <select id=lapPick style="background:var(--pan);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:7px 10px;font-size:14px"></select></label>
+       <span class=sub id=lapSummary style="margin:0"></span></div>
+     <canvas id=spd style="width:100%;height:120px;background:#07080b;border:1px solid var(--ln);border-radius:9px;display:block"></canvas>
+     <table style="margin-top:10px"><thead><tr><th>Lap</th><th>Time</th><th>S1</th><th>S2</th><th>S3</th><th>Offs</th></tr></thead><tbody id=laptable></tbody></table>
+     <div class=feed id=debrief style="margin-top:10px"></div>
+   </div>
  </div>
 
  <div class="sub foot">
@@ -95,6 +105,21 @@ const SEASON={
   {from:"Rico",body:"Vale's crew switched to soft compound next round. Didn't come from me."},
   {from:"Stu",body:"You're leaning too hard on the brakes into Three. Ease off or we lose the car."},
   {from:"Inquiry",body:"Two podiums, zero wins. What's failing on the last lap?"}]
+};
+
+// REPLAY lap review — what lap_review.py computes for the demo session (the Pages page shows it too).
+const BAKED_REVIEW={
+ summary:{route:"Watson Northside Loop",best:"1:42.40"},
+ laps:[{lap:1,fmt:"1:46.20",s1:34.1,s2:40.0,s3:32.1,offs:1,best:false},
+       {lap:2,fmt:"1:43.80",s1:33.6,s2:38.7,s3:31.5,offs:0,best:false},
+       {lap:3,fmt:"1:42.40",s1:33.4,s2:38.2,s3:30.8,offs:0,best:true}],
+ trace:[202,216,137,108,158,209,220,126,101,144,198,212,180].map(v=>({speed:v})),
+ debrief:[
+  "Watson Northside Loop — 3 laps. Your best was lap 3, 1:42.40.",
+  "Your best lap stitched all three sectors near your sector bests — that's a clean one.",
+  "You brought it down 3.8s from lap 1 to lap 3 — building into it.",
+  "Tidy it up: 1 off-route. Clean that and the time comes for free.",
+  "Top speed 220 km/h. 2 heavy braking zones; slowest point 101 km/h — that's the corner that pays."]
 };
 
 // ===== a tiny loom narrator: turn a live snapshot into paddock lines (deterministic) =====
@@ -134,6 +159,29 @@ function renderControl(state){ const def=STATES[state]||STATES.unknown;
 function render(s){ renderControl(s.state||"unknown"); renderField(s.field); renderStandings(s.standings);
  renderFeed(LIVE ? feedFromState(s) : SEASON.feed); }
 
+// ===== Lap Review: chart + table + the engineer's debrief =====
+function drawSpd(trace){ const c=document.getElementById('spd'),g=c.getContext('2d');
+ c.width=c.clientWidth*devicePixelRatio; c.height=c.clientHeight*devicePixelRatio;
+ g.clearRect(0,0,c.width,c.height); if(!trace||!trace.length)return;
+ const sp=trace.map(s=>s.speed||0),mx=Math.max(...sp,1),mn=Math.min(...sp,0),w=c.width,h=c.height,pad=10*devicePixelRatio;
+ g.strokeStyle="#7ad7f0"; g.lineWidth=2*devicePixelRatio; g.beginPath();
+ sp.forEach((v,i)=>{const x=pad+(w-2*pad)*i/Math.max(1,sp.length-1),y=h-pad-(h-2*pad)*(v-mn)/Math.max(1,mx-mn); i?g.lineTo(x,y):g.moveTo(x,y);});
+ g.stroke(); g.fillStyle="#8b94a3"; g.font=(11*devicePixelRatio)+"px Consolas";
+ g.fillText(Math.round(mx)+" km/h",pad,14*devicePixelRatio); }
+function renderReview(r){ if(!r)return;
+ document.getElementById('lapSummary').textContent = r.summary?(r.summary.route+"  ·  best "+(r.summary.best||"—")):"";
+ drawSpd(r.trace);
+ rows(document.getElementById('laptable'), r.laps, l=>`<td class=p>${l.lap}</td><td>${l.fmt}${l.best?" *":""}</td><td>${l.s1??""}</td><td>${l.s2??""}</td><td>${l.s3??""}</td><td>${l.offs||0}</td>`);
+ const d=document.getElementById('debrief'); d.innerHTML="";
+ for(const line of (r.debrief||[])){ const el=document.createElement('div'); el.className="msg";
+   el.innerHTML=`<div class=from>Engineer</div><div class=body>${line}</div>`; d.appendChild(el);} }
+async function loadSessions(){ try{ const list=await (await fetch('/sessions')).json();
+   const sel=document.getElementById('lapPick'); sel.innerHTML="";
+   for(const s of list){ const o=document.createElement('option'); o.value=s.id; o.textContent=s.route; sel.appendChild(o); }
+   sel.onchange=()=>loadReview(sel.value); if(list.length) loadReview(list[0].id);
+ }catch(_){} }
+async function loadReview(id){ try{ renderReview(await (await fetch('/session?id='+encodeURIComponent(id))).json()); }catch(_){} }
+
 // ===== mode detection + transport =====
 let LIVE=false;
 async function postCmd(intent){
@@ -153,9 +201,11 @@ async function boot(){
  try{ const p=await fetch('/ping'); LIVE = p.ok && (await p.json()).mode==="live"; }catch(_){ LIVE=false; }
  if(LIVE){ document.getElementById('badge').className="badge live"; document.getElementById('badge').textContent="● LIVE";
    document.getElementById('tagline').textContent="connected to Night City — control the race, watch the paddock react.";
-   poll(); setInterval(poll, 1200);
+   poll(); setInterval(poll, 1200); loadSessions();
  } else {
    render(SEASON);   // the shareable read-only portal
+   const sel=document.getElementById('lapPick'); sel.innerHTML='<option value=example>Watson Northside Loop (demo)</option>';
+   renderReview(BAKED_REVIEW);
  }
 }
 boot();
