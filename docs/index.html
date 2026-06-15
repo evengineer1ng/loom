@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>loom — a tape, sung</title>
+<style>
+ :root{--bg:#0b0c10;--pan:#15171d;--ln:#2b2f37;--tx:#eef1f4;--mut:#9aa3af;--acc:#7ad7f0;--good:#5ad27a}
+ *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--tx);
+   font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+ .wrap{max-width:760px;margin:0 auto;padding:18px}
+ h1{font:bold 22px Consolas,monospace;color:var(--acc);margin:0} .sub{color:var(--mut);font-size:13px;margin:2px 0 14px}
+ canvas{width:100%;height:120px;background:#07080b;border-radius:10px;display:block}
+ #now{min-height:54px;font-size:21px;margin:12px 0;color:var(--tx)}
+ .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+ select,button,textarea{background:var(--pan);color:var(--tx);border:1px solid var(--ln);border-radius:9px;
+   font-size:16px;padding:11px 14px} button{cursor:pointer} #play{background:var(--good);color:#000;font-weight:bold;min-width:120px}
+ label{color:var(--mut);font-size:13px} textarea{width:100%;min-height:78px;font:14px Consolas,monospace}
+ input[type=range]{width:150px}
+ a{color:var(--acc)}
+</style>
+</head>
+<body><div class=wrap>
+ <h1>loom</h1>
+ <div class=sub>a tape, narrated &amp; sung by deterministic logic — no model, no server, just this page</div>
+ <canvas id=viz></canvas>
+ <div id=now>press play</div>
+ <div class=row>
+   <button id=play>&#9654; play</button>
+   <label>tape <select id=tape></select></label>
+   <label>voice <select id=voice><option value=town_crier>town crier</option><option value=intern>intern</option></select></label>
+   <label>mode <select id=mode><option value=sing>sing (opera)</option><option value=speak>speak</option></select></label>
+   <label>vibrato <input type=range id=vib min=0 max=0.06 step=0.005 value=0.035></label>
+   <label><input type=checkbox id=loop checked> loop</label>
+ </div>
+ <div class=row style="flex-direction:column;align-items:stretch">
+   <label>connect your own tape — paste lines (each line becomes a sung beat):</label>
+   <textarea id=mine placeholder="paste anything — your chess moves, your steps, your day..."></textarea>
+ </div>
+ <div class=sub>deterministic: same tape &rarr; same song, every time. <span id=info></span></div>
+<script>
+// ---- the KB: demo tapes + grammars + verbs (inlined; this whole page is the artifact) ----
+const TAPES = {
+ "NBA Finals": [
+  {actor:"Wembanyama",action:"make",object:"dunk",valence:"hype"},
+  {actor:"Brunson",action:"make",object:"three",valence:"hype"},
+  {actor:"Anunoby",action:"make",object:"free throw",valence:"hype"},
+  {actor:"Wembanyama",action:"make",object:"dunk",valence:"hype"},
+  {actor:"Harper",action:"make",object:"three",valence:"hype"},
+  {actor:"Anunoby",action:"make",object:"three",valence:"hype"},
+  {actor:"Johnson",action:"make",object:"three",valence:"hype"},
+  {actor:"Brunson",action:"make",object:"jumper",valence:"hype"}
+ ],
+ "F1 — Barcelona": [
+  {actor:"Russell",action:"clock",object:"fastest lap",definite:true,valence:"hype"},
+  {actor:"Hulkenberg",action:"overtake",object:"Lindblad",valence:"hype"},
+  {actor:"Hadjar",action:"overtake",object:"Gasly",valence:"hype"},
+  {actor:"Leclerc",action:"overtake",object:"Piastri",valence:"hype"},
+  {actor:"Hamilton",action:"pit",valence:""},
+  {actor:"Hamilton",action:"clock",object:"fastest lap",definite:true,valence:"hype"},
+  {actor:"Norris",action:"overtake",object:"Albon",valence:"hype"}
+ ],
+ "heartbeat": [
+  {actor:"your heart",action:"rise",valence:"alarm"},
+  {actor:"you",action:"move",valence:""},
+  {actor:"your heart",action:"spike",valence:"alarm"},
+  {actor:"your heart",action:"settle",valence:"calm"}
+ ]
+};
+const VERBS={overtake:"overtook",make:"made",rise:"rose",take:"took",seize:"seized",get:"got",run:"ran",
+ hit:"hit",set:"set",put:"put",pit:"pitted",clock:"clocked",miss:"missed",rebound:"rebounded",spike:"spiked",
+ settle:"settled",move:"moved",go:"went",come:"came",fall:"fell",break:"broke",hold:"held",win:"won",lose:"lost"};
+const GRAMMARS={
+ town_crier:{opener:"Hear ye! ",transitions:["","Anon, ","And lo, "],
+   codas:{hype:[", hear it well!"," — rejoice!"],alarm:[" — beware!"],calm:[", and all is well."],"*":[", so it is told."]}},
+ intern:{opener:"",transitions:["","Then ","And "],
+   codas:{hype:["!"," — huge!"],alarm:["...","— uh oh."],calm:["."],"*":["."]}}
+};
+// ---- narration (a port of the engine's grammar) ----
+function regPast(v){ if(!v)return v; if(v.endsWith("e"))return v+"d";
+ if(v.length>2&&v.endsWith("y")&&!"aeiou".includes(v[v.length-2]))return v.slice(0,-1)+"ied";
+ const vg=(v.match(/[aeiou]+/g)||[]).length;
+ if(vg===1&&v.length>=3&&!"aeiouwxy".includes(v.slice(-1))&&"aeiou".includes(v[v.length-2])&&!"aeiou".includes(v[v.length-3]))
+   return v+v.slice(-1)+"ed";
+ return v+"ed"; }
+function past(a){return VERBS[a]||regPast(a);}
+function art(w){return "aeiou".includes(w[0].toLowerCase())?"an":"a";}
+function objPhrase(r){const o=r.object; if(!o)return ""; if(r.definite)return " the "+o;
+ if(o[0]===o[0].toUpperCase())return " "+o; return " "+art(o)+" "+o;}
+function hpick(arr,seed){let h=2166136261;for(const c of seed)h=(h^c.charCodeAt(0))*16777619>>>0;return arr[h%arr.length];}
+function narrate(r,g,i){
+ if(r.raw!==undefined) return r.raw;                       // pasted line: spoken/sung verbatim
+ const gr=GRAMMARS[g]; const actor=r.actor||"";
+ const opener=gr.opener?hpick([gr.opener,""],"o"+i+actor):"";
+ const trans=i>0?hpick(gr.transitions,"t"+i+actor):"";
+ const coda=hpick(gr.codas[r.valence]||gr.codas["*"],"c"+i+r.action);
+ let t=(opener||trans)+actor+" "+past(r.action)+objPhrase(r)+coda;
+ t=t.replace(/\s+/g," ").trim(); t=t.charAt(0).toUpperCase()+t.slice(1);
+ if(!/[.!?]$/.test(t))t+="."; return t;
+}
+function linesFor(){
+ const mine=document.getElementById('mine').value.trim();
+ if(mine) return mine.split(/\n+/).map(s=>({raw:s.trim()})).filter(r=>r.raw).map((r,i)=>narrate(r,"",i));
+ const tape=TAPES[document.getElementById('tape').value];
+ const g=document.getElementById('voice').value;
+ return tape.map((r,i)=>narrate(r,g,i));
+}
+// ---- the synth (Web Audio = source -> formant filters -> envelope, + vibrato) ----
+let ctx, analyser;
+const SCALE=[220.00,261.63,293.66,329.63,392.00,440.00,523.25];   // A-minor pentatonic
+function melody(n){ if(n<=1)return [SCALE[0]]; const o=[];
+ for(let i=0;i<n;i++){const x=i/(n-1),a=1-Math.abs(2*x-1);o.push(SCALE[Math.round((SCALE.length-1)*a)]);}
+ o[o.length-1]=SCALE[0]; return o; }
+function singNote(freq,t,dur,vib){
+ const osc=ctx.createOscillator(); osc.type="sawtooth"; osc.frequency.setValueAtTime(freq,t);
+ if(vib>0){const lfo=ctx.createOscillator();lfo.frequency.value=5.5;const lg=ctx.createGain();
+   lg.gain.value=freq*vib;lfo.connect(lg);lg.connect(osc.frequency);lfo.start(t);lfo.stop(t+dur);}
+ const sum=ctx.createGain(); sum.gain.value=0.33;
+ [700,1220,2600].forEach(f=>{const bp=ctx.createBiquadFilter();bp.type="bandpass";bp.frequency.value=f;bp.Q.value=7;osc.connect(bp);bp.connect(sum);});
+ const env=ctx.createGain(); env.gain.setValueAtTime(0,t);
+ env.gain.linearRampToValueAtTime(1,t+0.04); env.gain.setValueAtTime(1,t+Math.max(0.05,dur-0.06));
+ env.gain.linearRampToValueAtTime(0,t+dur);
+ sum.connect(env); env.connect(analyser); osc.start(t); osc.stop(t+dur+0.02);
+}
+function singLineDur(text,vib){
+ const words=(text.match(/[A-Za-z']+/g)||["la"]); const mel=melody(words.length); const d=0.32;
+ let t=ctx.currentTime+0.03; for(const f of mel){singNote(f,t,d,vib);t+=d;} return (t-ctx.currentTime);
+}
+// ---- transport ----
+let playing=false, idx=0, lines=[];
+function drawViz(){ const c=document.getElementById('viz'),g=c.getContext('2d');
+ c.width=c.clientWidth*devicePixelRatio; c.height=c.clientHeight*devicePixelRatio;
+ const buf=new Uint8Array(analyser?analyser.frequencyBinCount:64);
+ (function loop(){ requestAnimationFrame(loop); g.clearRect(0,0,c.width,c.height);
+   if(analyser)analyser.getByteFrequencyData(buf);
+   const n=64,w=c.width/n; for(let i=0;i<n;i++){const v=(buf[i*2]||0)/255; g.fillStyle=`rgba(122,215,240,${0.3+0.7*v})`;
+     const h=v*c.height; g.fillRect(i*w,c.height-h,w-2,h);} })();
+}
+function step(){
+ if(!playing)return;
+ if(idx>=lines.length){ if(document.getElementById('loop').checked){idx=0;} else {playing=false;document.getElementById('play').innerHTML='&#9654; play';document.getElementById('now').textContent='— end of tape —';return;} }
+ const text=lines[idx++]; document.getElementById('now').textContent=text;
+ const mode=document.getElementById('mode').value, vib=parseFloat(document.getElementById('vib').value);
+ if(mode==="speak" && window.speechSynthesis){ const u=new SpeechSynthesisUtterance(text);
+   u.onend=()=>setTimeout(step,250); speechSynthesis.cancel(); speechSynthesis.speak(u); }
+ else { const dur=singLineDur(text,vib); setTimeout(step,(dur+0.25)*1000); }
+}
+document.getElementById('play').onclick=()=>{
+ if(playing){playing=false;document.getElementById('play').innerHTML='&#9654; play';if(window.speechSynthesis)speechSynthesis.cancel();return;}
+ if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)();analyser=ctx.createAnalyser();analyser.fftSize=256;analyser.connect(ctx.destination);drawViz();}
+ ctx.resume(); lines=linesFor(); idx=0; playing=true; document.getElementById('play').innerHTML='&#10074;&#10074; stop'; step();
+};
+// init
+const sel=document.getElementById('tape'); Object.keys(TAPES).forEach(k=>{const o=document.createElement('option');o.textContent=k;sel.appendChild(o);});
+document.getElementById('info').textContent="port of the ~800-line engine, in one file.";
+</script>
+</div></body></html>
