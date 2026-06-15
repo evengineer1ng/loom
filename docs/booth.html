@@ -56,7 +56,10 @@
      <label>vibrato <input type=range id=vib min=0 max=0.06 step=0.005 value=0.035></label>
      <label>brightness <input type=range id=bright min=0.3 max=1.6 step=0.05 value=1></label>
      <label>continuity <input type=range id=cont min=0 max=1 step=0.05 value=0.4></label>
+     <label title="how far to trace the causal thread from each beat">depth <input type=range id=depth min=0 max=3 step=1 value=0></label>
+     <label title="how many expectations are active — questions fire where the tape deviates">curiosity <input type=range id=curio min=0 max=2 step=1 value=0></label>
    </div>
+   <div class=sub style="margin:6px 0 0">depth &amp; curiosity reshape the <b>words</b> (rebuild on play); they apply to the demo tapes, not pasted lines.</div>
  </div>
 
  <div class=row style="flex-direction:column;align-items:stretch">
@@ -83,13 +86,13 @@ const TAPES = {
   {actor:"Hulkenberg",action:"overtake",object:"Lindblad",valence:"hype"},
   {actor:"Hadjar",action:"overtake",object:"Gasly",valence:"hype"},
   {actor:"Leclerc",action:"overtake",object:"Piastri",valence:"hype"},
-  {actor:"Hamilton",action:"pit",valence:""},
+  {actor:"Hamilton",action:"pit",valence:"",priority:0.5},
   {actor:"Hamilton",action:"clock",object:"fastest lap",definite:true,valence:"hype"},
   {actor:"Norris",action:"overtake",object:"Albon",valence:"hype"}
  ],
  "heartbeat": [
-  {actor:"your heart",action:"rise",valence:"alarm"},
-  {actor:"you",action:"move",valence:""},
+  {actor:"your heart",action:"rise",valence:"alarm",priority:0.5},
+  {actor:"you",action:"move",valence:"",priority:0.4},
   {actor:"your heart",action:"spike",valence:"alarm"},
   {actor:"your heart",action:"settle",valence:"calm"}
  ]
@@ -126,6 +129,16 @@ const GRAMMARS={
  astronaut:{opener:"Houston, ",transitions:["","Telemetry shows ","Copy, "],
    codas:{hype:[" — we have liftoff."],alarm:[" — abort criteria."],calm:[", all systems nominal."],"*":[", over."]}}
 };
+// causal RULES (for depth) and EXPECTATIONS (for curiosity) per demo tape — domain DATA, not logic.
+const RULES={
+ "F1 — Barcelona":[{cause:"pit",effect:"clock",same_actor:true,within:3,reason:"On fresh tyres"}],
+ "heartbeat":[{cause:"rise",effect:"spike",same_actor:true,reason:"After the climb"}]
+};
+const INQUIRY={
+ "NBA Finals":[{type:"no_repeat",action:"make",within:3,at:1}],
+ "F1 — Barcelona":[{type:"expect_cause",effect:"clock",cause:"pit",within:6,at:1}],
+ "heartbeat":[{type:"expect_cause",effect:"spike",cause:"settle",within:9,at:1}]
+};
 // ---- narration (a port of the engine's grammar) ----
 function regPast(v){ if(!v)return v; if(v.endsWith("e"))return v+"d";
  if(v.length>2&&v.endsWith("y")&&!"aeiou".includes(v[v.length-2]))return v.slice(0,-1)+"ied";
@@ -138,22 +151,81 @@ function art(w){return "aeiou".includes(w[0].toLowerCase())?"an":"a";}
 function objPhrase(r){const o=r.object; if(!o)return ""; if(r.definite)return " the "+o;
  if(o[0]===o[0].toUpperCase())return " "+o; return " "+art(o)+" "+o;}
 function hpick(arr,seed){let h=2166136261;for(const c of seed)h=(h^c.charCodeAt(0))*16777619>>>0;return arr[h%arr.length];}
-function narrate(r,g,i){
- if(r.raw!==undefined) return r.raw;                       // pasted line: spoken/sung verbatim
- const gr=GRAMMARS[g]; const actor=r.actor||"";
- const opener=gr.opener?hpick([gr.opener,""],"o"+i+actor):"";
- const trans=i>0?hpick(gr.transitions,"t"+i+actor):"";
- const coda=hpick(gr.codas[r.valence]||gr.codas["*"],"c"+i+r.action);
- let t=(opener||trans)+actor+" "+past(r.action)+objPhrase(r)+coda;
- t=t.replace(/\s+/g," ").trim(); t=t.charAt(0).toUpperCase()+t.slice(1);
- if(!/[.!?]$/.test(t))t+="."; return t;
+// a CLAUSE is the bare event (no opener/coda) so clauses compose into a thread; DRESS wraps a body in the voice.
+function clause(r,subject){ return ((subject||r.actor||"")+" "+past(r.action)+objPhrase(r)).replace(/\s+/g," ").trim(); }
+function dress(body,r,g,i){ const gr=GRAMMARS[g]||GRAMMARS.intern;
+ const opener=gr.opener?hpick([gr.opener,""],"o"+i+(r.actor||"")):"";
+ const trans=i>0?hpick(gr.transitions,"t"+i+(r.actor||"")):"";
+ const coda=hpick(gr.codas[r.valence]||gr.codas["*"],"c"+i+(r.action||""));
+ let t=(opener||trans)+body+coda; t=t.replace(/\s+/g," ").trim();
+ t=t.charAt(0).toUpperCase()+t.slice(1); if(!/[.!?]$/.test(t))t+="."; return t;
 }
+function narrate(r,g,i){ if(r.raw!==undefined) return r.raw; return dress(clause(r),r,g,i); }
+// ---- depth: the thread-puller (build a causal graph, trace it) — ported from thread.py, pure logic ----
+function actorChains(ev){const n=ev.length,prev=Array(n).fill(null),last={};
+ for(let i=0;i<n;i++){const a=ev[i].actor; if(!a)continue; if(a in last)prev[i]=last[a]; last[a]=i;} return prev;}
+function within(ev,j,i,w){const lj=+ev[j].lap,li=+ev[i].lap; if(isNaN(lj)||isNaN(li))return true; return Math.abs(li-lj)<=w;}
+function buildEdges(ev,rules){rules=rules||[];const n=ev.length,cause=Array(n).fill(null);
+ for(let i=0;i<n;i++){const e=ev[i];
+   for(const r of rules){ if(e.action!==r.effect)continue;
+     for(let j=i-1;j>=0;j--){const c=ev[j]; if(c.action!==r.cause)continue;
+       if(r.same_actor&&c.actor!==e.actor)continue; if(r.cross_actor&&c.actor===e.actor)continue;
+       if(!within(ev,j,i,r.within==null?9999:r.within))continue; cause[i]=[j,r.reason||""]; break; }
+     if(cause[i])break; } }
+ const prev=actorChains(ev);
+ for(let i=0;i<n;i++) if(cause[i]==null&&prev[i]!=null) cause[i]=[prev[i],""];  // same-actor sequential fallback
+ const effect=Array(n).fill(null);
+ for(let i=0;i<n;i++){const c=cause[i]; if(c&&effect[c[0]]==null) effect[c[0]]=[i,c[1]];} return [cause,effect];}
+function pull(cause,effect,seed,depth,flavour){let ch,fh;
+ if(flavour==="back"){ch=depth;fh=0;} else if(flavour==="forward"){ch=0;fh=depth;} else {ch=Math.ceil(depth/2);fh=Math.floor(depth/2);}
+ const causes=[]; let cur=seed; for(let k=0;k<ch;k++){const ce=cause[cur]; if(!ce)break; causes.push(ce); cur=ce[0];} causes.reverse();
+ const fwds=[]; cur=seed; for(let k=0;k<fh;k++){const fe=effect[cur]; if(!fe)break; fwds.push(fe); cur=fe[0];} return [causes,fwds];}
+function weaveBody(ev,seed,cause,effect,depth,flavour){
+ const pr=pull(cause,effect,seed,depth,flavour),fwds=pr[1]; let lead="",rendered=pr[0].slice();
+ if(rendered.length&&rendered[rendered.length-1][1]){ const tok=rendered[rendered.length-1][1];   // a TYPED cause folds to a phrase
+   if(tok.indexOf(" ")>=0){ lead=tok.replace(/[,\s]+$/,"")+", "; rendered=rendered.slice(0,-1); } }
+ const parts=[]; for(const c of rendered) parts.push("after "+clause(ev[c[0]])+", ");
+ parts.push(lead+clause(ev[seed]));
+ for(const f of fwds) parts.push(", and then "+clause(ev[f[0]]));
+ return parts.join(""); }
+// ---- curiosity: questions where the tape deviates from an expectation — ported from inquiry.py ----
+function exNoRepeat(ev,s,out){const w=s.within==null?4:s.within,last={};
+ for(let i=0;i<ev.length;i++){const e=ev[i]; if(e.action!==s.action)continue; const a=e.actor,lap=+e.lap,prev=last[a];
+   if(prev!=null&&!isNaN(lap)&&lap-prev<=w) out.push({about:i,text:`Why did ${a} ${e.action}${objPhrase(e)} again so soon?`});
+   last[a]=isNaN(lap)?prev:lap; } }
+function exExpectCause(ev,s,out){const w=s.within==null?6:s.within;
+ for(let i=0;i<ev.length;i++){const e=ev[i]; if(e.action!==s.effect)continue; const a=e.actor,lap=+e.lap; let has=false;
+   for(let j=0;j<i;j++){const c=ev[j]; if(c.action===s.cause&&c.actor===a){const lc=+c.lap; if(!isNaN(lc)&&!isNaN(lap)&&lap-lc>=0&&lap-lc<=w){has=true;break;}}}
+   if(!has) out.push({about:i,text:`How did ${a} manage the ${e.object||s.effect} with no recent ${s.cause}?`}); } }
+function exStreakThen(ev,s,out){const count=s.count==null?2:s.count,w=s.within==null?2:s.within,streak={};
+ for(let i=0;i<ev.length;i++){const e=ev[i],a=e.actor,lap=+e.lap;
+   if(e.action===s.action_a){const r=streak[a]||[0,null]; streak[a]=[r[0]+1,lap];}
+   else if(e.action===s.action_b){const r=streak[a]||[0,null];
+     if(r[0]>=count&&r[1]!=null&&!isNaN(lap)&&lap-r[1]<=w) out.push({about:i,text:`Did ${a}'s run of ${r[0]} ${s.action_a}s stall when they ${s.action_b}?`});
+     streak[a]=[0,null];} } }
+const EXPECT={no_repeat:exNoRepeat,expect_cause:exExpectCause,streak_then:exStreakThen};
+function inquiryAsk(ev,specs,level){const out=[];
+ for(const s of specs||[]){ if((s.at==null?1:s.at)>level)continue; const fn=EXPECT[s.type]; if(fn)fn(ev,s,out); }
+ out.sort((a,b)=>a.about-b.about); return out; }
+// ---- assemble: narrate each beat (depth 0) OR thread salient seeds (depth>0), then weave questions in ----
+function prep(tape){ return tape.map((r,i)=>{const e=Object.assign({},r); if(e.lap==null)e.lap=i; if(e.priority==null)e.priority=0.8; return e;}); }
 function linesFor(){
  const mine=document.getElementById('mine').value.trim();
- if(mine) return mine.split(/\n+/).map(s=>({raw:s.trim()})).filter(r=>r.raw).map((r,i)=>narrate(r,"",i));
- const tape=TAPES[document.getElementById('tape').value];
- const g=document.getElementById('voice').value;
- return tape.map((r,i)=>narrate(r,g,i));
+ if(mine) return mine.split(/\n+/).map(s=>s.trim()).filter(Boolean).map((s,i)=>narrate({raw:s},"",i));
+ const name=document.getElementById('tape').value, g=document.getElementById('voice').value, ev=prep(TAPES[name]);
+ const depth=+document.getElementById('depth').value, curiosity=+document.getElementById('curio').value;
+ let beats=[];
+ if(depth<=0){ ev.forEach((r,i)=>beats.push({text:narrate(r,g,i),seeds:new Set([i])})); }
+ else { const ce=buildEdges(ev,RULES[name]||[]),cause=ce[0],effect=ce[1],consumed=new Set();
+   for(let i=0;i<ev.length;i++){ if(consumed.has(i)||ev[i].priority<0.7)continue;   // salience: thread only important seeds
+     const pr=pull(cause,effect,i,depth,"both");
+     beats.push({text:dress(weaveBody(ev,i,cause,effect,depth,"both"),ev[i],g,i),
+                 seeds:new Set([i].concat(pr[0].map(c=>c[0]),pr[1].map(f=>f[0])))});
+     consumed.add(i); pr[0].forEach(c=>consumed.add(c[0])); pr[1].forEach(f=>consumed.add(f[0])); } }
+ if(curiosity>0) for(const q of inquiryAsk(ev,INQUIRY[name]||[],curiosity)){
+   const pos=beats.findIndex(b=>b.seeds.has(q.about)); const qb={text:q.text,seeds:new Set()};
+   if(pos<0) beats.push(qb); else beats.splice(pos+1,0,qb); }
+ return beats.map(b=>b.text);
 }
 // ---- the synth (Web Audio = source -> formant filters -> envelope, + vibrato) ----
 let ctx, analyser;
