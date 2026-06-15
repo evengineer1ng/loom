@@ -4,7 +4,17 @@ The deterministic runtime is pure Python + stdlib + PyYAML, so it runs on a phon
 **Playing a loom needs no model at all** — only *authoring a new one* uses an LLM (and that can be
 a 4B running locally, or done once on a bigger machine and the KB artifact copied over).
 
-## Run an existing loom (zero model, zero GPU)
+## Touch UI — the web booth (recommended on a phone)
+The booth is a tiny stdlib web server + one page; the **browser speaks** (Web Speech API), so no
+audio plumbing and no Termux:API needed. Faders, antenna toggles, KEEP / SAVE MIXTAPE — touch-native.
+```sh
+pkg install python && pip install pyyaml
+python loom_serve.py --tape f1=data/f1_barcelona_2026.json --tape news=data/rss_f1news.json
+```
+Then open **http://127.0.0.1:8765** in the phone's browser. Zero model, zero GPU. (Toggle COLOR on
+only if you've pointed `LOOM_LLM*` at a model — see below.)
+
+## Run an existing loom from the CLI (zero model, zero GPU)
 ```sh
 pkg install python
 pip install pyyaml

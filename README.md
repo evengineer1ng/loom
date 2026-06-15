@@ -30,6 +30,10 @@ python loom_booth.py --tape f1=data/f1.json                          # play it: 
 The whole narration stack — speech · threads · inquiry · mixer · antenna — is ~800 LOC + a few KB of
 JSON declarations, deterministic, stdlib.
 
+**Touch booth (any browser, incl. a phone):** `python loom_serve.py` → open `http://127.0.0.1:8765`
+— faders, antenna toggles, keep-a-mixtape; the browser speaks. Playback needs no model or GPU
+(see [`docs/ANDROID.md`](docs/ANDROID.md)).
+
 **Measured** ([`docs/BENCHMARK.md`](docs/BENCHMARK.md)): narrating structured events, this is ~5
 orders of magnitude faster than a local LLM and 0% confabulation vs a steelmanned 8B's 34% — the
 LLM's only edge is fluency. The lesson: use the model to *author* the renderer (compile time), not
