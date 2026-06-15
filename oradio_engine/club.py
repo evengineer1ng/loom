@@ -159,6 +159,28 @@ class Club:
             ))
         return manifest
 
+    def plugin_manifest(self, descriptor: Any) -> List["EndpointRequest"]:
+        """ADVERTISE external CODE an `.oradio` would fetch + import — *before* any network touch.
+
+        Remote code is always sensitive: a shared file must never run un-consented. This mirrors
+        the telemetry handshake exactly, so ``open_oradio`` is the one front door. Consent is keyed
+        by the pinned coordinate (``plugin:<source>@<ref>``), asked once, machine-level, revocable.
+        """
+        from oradio_engine.plugins import declared_external_plugins
+
+        reqs: List[EndpointRequest] = []
+        for ref in declared_external_plugins(descriptor):
+            coord = f"{ref.source}@{ref.ref}"
+            key = f"plugin:{coord}"
+            pin = "pinned" if ref.sha256 else "UNPINNED — will be refused"
+            reqs.append(EndpointRequest(
+                name=ref.name, kind=key,
+                reads=f"fetches & imports code from {coord} ({pin})",
+                sensitive=True,
+                consented=self.has_consent(key),
+            ))
+        return reqs
+
     def _check_remembered(self, key: str) -> Optional[ClubAsk]:
         """None if resolved-and-valid; a ClubAsk (changed/vanished) otherwise. Caller handles 'new'."""
         entry = self._store.get(key)

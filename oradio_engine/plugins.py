@@ -111,6 +111,10 @@ def cache_dir() -> str:
 class PluginResolver:
     """Local-first, then fetch-from-source. The Club's bouncer for code.
 
+    ``allow_network`` defaults to **False**: decoding a *shared* `.oradio` must never reach
+    out and import remote code on its own. The host opts in explicitly (``allow_network=True``,
+    which ``open_oradio`` grants only once the fetch is consented — the one front door).
+
     ``opener`` is injectable so tests drive the full fetch/verify/unpack path with a
     ``file://`` tarball — the real ``https://`` path is byte-for-byte identical.
     """
@@ -118,7 +122,7 @@ class PluginResolver:
     def __init__(
         self,
         prestocked_dirs: Optional[List[str]] = None,
-        allow_network: bool = True,
+        allow_network: bool = False,
         opener: Callable[[str], object] = urlopen,
     ) -> None:
         self.prestocked = list(prestocked_dirs or [])
@@ -140,11 +144,19 @@ class PluginResolver:
 
     # -- fetch (the bouncer installs) ------------------------------------- #
     def fetch(self, ref: PluginRef) -> ResolvedPlugin:
+        # No pin, no run: an external plugin MUST be hash-pinned before we fetch a single byte.
+        # This is the invariant this module promises ("you run exactly the bytes the author saw")
+        # — enforced, not just documented, so an unpinned shared .oradio can't import remote code.
+        if not ref.sha256:
+            raise IntegrityError(
+                f"plugin {ref.name!r} from {ref.source!r} declares no sha256 — refusing to fetch "
+                f"and import unpinned remote code. Pin it: 'github:owner/repo@ref#<sha256>'."
+            )
         url = ref.tarball_url()
         with self._open(url) as resp:               # urlopen handles https + file://
             data = resp.read()
         digest = hashlib.sha256(data).hexdigest()
-        if ref.sha256 and digest != ref.sha256:
+        if digest != ref.sha256:
             raise IntegrityError(
                 f"plugin {ref.name!r} hash mismatch: declared {ref.sha256}, got {digest}"
             )
@@ -158,7 +170,7 @@ class PluginResolver:
         # record what we pinned, for audit (the receipt)
         with open(os.path.join(slot, ".oradio_pin"), "w", encoding="utf-8") as f:
             f.write(f"{ref.source}@{ref.ref}\nsha256={digest}\n")
-        return ResolvedPlugin(ref=ref, path=_plugin_root(slot), verified=bool(ref.sha256))
+        return ResolvedPlugin(ref=ref, path=_plugin_root(slot), verified=True)
 
     def resolve(self, ref: PluginRef) -> Optional[ResolvedPlugin]:
         """Local first; fetch if external + network allowed; else None (caller reports gracefully)."""
@@ -168,6 +180,29 @@ class PluginResolver:
         if ref.is_external and self.allow_network:
             return self.fetch(ref)
         return None
+
+
+def declared_external_plugins(descriptor: object) -> List[PluginRef]:
+    """The external (remote) plugins a descriptor's worlds/telemetry would fetch + import.
+
+    These are *code*, not data — so opening a shared `.oradio` must consent-gate them the same
+    way it gates sensitive telemetry (see ``Club.plugin_manifest`` / ``open_oradio``).
+    """
+    refs: List[PluginRef] = []
+    nodes = list(getattr(descriptor, "worlds", []) or []) + list(getattr(descriptor, "telemetry", []) or [])
+    for node in nodes:
+        params = getattr(node, "params", {}) or {}
+        if not params.get("plugin"):
+            continue
+        kind = getattr(node, "organ", None) or getattr(node, "source", None)
+        ref = PluginRef.parse(kind, {
+            "source": params.get("plugin"),
+            "ref": params.get("ref", "main"),
+            "sha256": params.get("sha256"),
+        })
+        if ref.is_external:
+            refs.append(ref)
+    return refs
 
 
 def _plugin_root(slot: str) -> str:

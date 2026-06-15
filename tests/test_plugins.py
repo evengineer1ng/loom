@@ -93,7 +93,7 @@ def test_fetch_verify_unpack_load_and_use(isolated_club):
     url, digest = _make_plugin_tarball(isolated_club)
     ref = PluginRef(name="zoo", source=url, ref="main", sha256=digest)
 
-    resolver = PluginResolver()
+    resolver = PluginResolver(allow_network=True)   # host opted in to fetching
     resolved = resolver.resolve(ref)          # fetch + sha256 verify + unpack to cache
     assert resolved is not None and resolved.verified
     assert os.path.isfile(os.path.join(resolved.path, "zoo.py"))
@@ -107,13 +107,31 @@ def test_hash_mismatch_is_rejected(isolated_club):
     url, _digest = _make_plugin_tarball(isolated_club)
     ref = PluginRef(name="zoo", source=url, ref="main", sha256="0" * 64)  # wrong pin
     with pytest.raises(IntegrityError):
-        PluginResolver().resolve(ref)
+        PluginResolver(allow_network=True).resolve(ref)
+
+
+def test_unpinned_external_plugin_is_refused_before_fetch(isolated_club):
+    # no sha256 = no pin = no run. We must refuse BEFORE opening the tarball, even with the
+    # opener available — an unpinned shared .oradio can never import arbitrary remote code.
+    url, _digest = _make_plugin_tarball(isolated_club)
+    opened = []
+    ref = PluginRef(name="zoo", source=url, ref="main", sha256=None)
+    resolver = PluginResolver(allow_network=True, opener=lambda u: opened.append(u))
+    with pytest.raises(IntegrityError):
+        resolver.resolve(ref)
+    assert opened == []                        # refused before a single byte was fetched
+
+
+def test_network_off_by_default_so_decoding_never_auto_fetches(isolated_club):
+    url, digest = _make_plugin_tarball(isolated_club)
+    ref = PluginRef(name="zoo", source=url, ref="main", sha256=digest)
+    assert PluginResolver().resolve(ref) is None   # default: no network, no silent import
 
 
 def test_cache_hit_needs_no_network(isolated_club):
     url, digest = _make_plugin_tarball(isolated_club)
     ref = PluginRef(name="zoo", source=url, ref="main", sha256=digest)
-    PluginResolver().resolve(ref)              # populate cache
+    PluginResolver(allow_network=True).resolve(ref)   # populate cache
 
     def _no_network(_url):
         raise AssertionError("must not hit the network on a cache hit")
@@ -138,16 +156,32 @@ def test_open_foreign_missing_plugin_is_calm_not_a_crash(isolated_club):
     assert any("totally_unknown_organ" in m for m in result.report.missing_required)
 
 
-def test_open_foreign_oradio_autofetches_plugin_and_runs(isolated_club):
-    # a stranger's .oradio names a source it carries by github coordinate; the club fetches
-    # it, verifies the hash, loads it, and the simulation actually runs. The zoo dream.
+def test_open_foreign_oradio_fetches_plugin_and_runs_with_consent(isolated_club):
+    # a stranger's .oradio names a source it carries by github coordinate; WITH consent
+    # (allow_sensitive=the UI's "yes, fetch it") the club fetches it, verifies the hash,
+    # loads it, and the simulation actually runs. The zoo dream — opted into.
     from oradio_engine.loader import open_oradio
     url, digest = _make_tarball(isolated_club, "zoo_feed", FEED_SRC)
     desc = {
         "oradio": "zoo",
         "telemetry": [{"source": "zoo_feed", "name": "zoo", "plugin": url, "sha256": digest}],
     }
-    result = open_oradio(desc)
+    result = open_oradio(desc, allow_sensitive=True)
     assert result.ok, result.report.summary()
     result.engine.run(steps=4)
     assert any(c.type == "zoo" for c in result.engine.bus)   # the lion/tiger are on the bus
+
+
+def test_open_foreign_oradio_withholds_unconsented_remote_code(isolated_club):
+    # the security fix: the SAME foreign .oradio, opened WITHOUT consent, must not fetch or
+    # import the remote code. It's advertised, withheld, and degraded — never silently run.
+    from oradio_engine.loader import open_oradio
+    url, digest = _make_tarball(isolated_club, "zoo_feed", FEED_SRC)
+    desc = {
+        "oradio": "zoo",
+        "telemetry": [{"source": "zoo_feed", "name": "zoo", "plugin": url, "sha256": digest}],
+    }
+    result = open_oradio(desc)                       # no allow_sensitive → no consent
+    assert result.ok is False and result.engine is None
+    assert result.plugins and result.plugins[0].sensitive
+    assert result.plugins_withheld and "zoo_feed" not in sys.modules

@@ -116,6 +116,8 @@ class OpenResult:
     descriptor: OradioDescriptor
     manifest: list = None          # what the station advertised it would consume
     withheld: list = None          # sensitive endpoints withheld for lack of consent
+    plugins: list = None           # external code the station advertised it would fetch+import
+    plugins_withheld: list = None  # remote plugins NOT fetched (un-consented) — degraded, not run
 
 
 def open_oradio(spec, *, club: Optional[Club] = None, gate: bool = True,
@@ -153,17 +155,37 @@ def open_oradio(spec, *, club: Optional[Club] = None, gate: bool = True,
         bindings=[b for b in desc.bindings if b.source not in dropped],
     )
 
+    # 2b) consent-gate external CODE fetch — the same handshake as sensitive telemetry. A remote
+    #     plugin is code; a shared `.oradio` must not import it un-consented. Network is enabled for
+    #     this open only if every declared external plugin is consented (or ``allow_sensitive``
+    #     grants it). Otherwise it stays OFF and a genuinely-needed plugin degrades to a calm
+    #     MissingPlugin below — never a silent fetch+import.
+    plugin_reqs = club.plugin_manifest(desc)
+    plugins_withheld = []
+    allow_network = True
+    for req in plugin_reqs:
+        if req.consented or allow_sensitive:
+            if allow_sensitive and not req.consented:
+                club.grant_consent(req.kind)   # explicit "yes, fetch it" → remember, ask once
+        else:
+            allow_network = False              # one un-consented plugin → no network this open
+            plugins_withheld.append(req)
+    resolver = PluginResolver(allow_network=allow_network)
+
     # 2) resolve the rest of the dependencies (theme/voices/llm…)
     report = club.resolve(desc)
     if gate and not report.ready:
-        return OpenResult(desc.name, False, None, report, desc, manifest, withheld)
+        return OpenResult(desc.name, False, None, report, desc, manifest, withheld,
+                          plugin_reqs, plugins_withheld)
 
-    # 3) build — fetching any declared external plugins; a missing one degrades to a calm
+    # 3) build — fetching any consented external plugins; a missing/withheld one degrades to a calm
     #    report instead of a crash (the foreign-file UX: "you're missing X", never a traceback).
     try:
-        engine = load_oradio(desc)
+        engine = load_oradio(desc, resolver=resolver)
     except MissingPlugin as missing:
         report.ready = False
         report.missing_required.append(str(missing))
-        return OpenResult(desc.name, False, None, report, desc, manifest, withheld)
-    return OpenResult(desc.name, True, engine, report, desc, manifest, withheld)
+        return OpenResult(desc.name, False, None, report, desc, manifest, withheld,
+                          plugin_reqs, plugins_withheld)
+    return OpenResult(desc.name, True, engine, report, desc, manifest, withheld,
+                      plugin_reqs, plugins_withheld)
