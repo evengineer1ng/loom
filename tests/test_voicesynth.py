@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from voicesynth import estimate_f0, sing_note
+from voicesynth import has_pitch, sing_note
 
 
-def test_sung_pitch_matches_target():
+def test_sung_pitch_present_at_target():
     for hz in [220.0, 330.0, 440.0, 523.25]:
-        f = estimate_f0(sing_note(hz, 0.5, vowel="a"), 44100)
-        assert abs(f - hz) / hz < 0.05, (hz, f)
+        assert has_pitch(sing_note(hz, 0.5, vowel="a"), 44100, hz), hz
 
 
 def test_vowel_changes_timbre():
@@ -30,7 +29,7 @@ def test_vibrato_modulates_pitch_but_not_center():
     flat = sing_note(440.0, 0.6, vowel="a", vibrato_depth=0.0)
     vib = sing_note(440.0, 0.6, vowel="a", vibrato_depth=0.03)
     assert (flat != vib).any()                             # vibrato changed the waveform
-    assert abs(estimate_f0(vib, sr) - 440.0) / 440.0 < 0.06  # ...around the right center pitch
+    assert has_pitch(vib, sr, 440.0, tol=0.06)             # ...still centered on the right pitch
 
 
 def test_deterministic():

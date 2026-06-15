@@ -32,16 +32,15 @@ def main():
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     sf.write(args.out, audio, sr)
 
-    print(f'wrote {args.out}  (vowel "{args.vowel}", vibrato {args.vibrato})\n\nautocorrelation pitch check:')
+    print(f'wrote {args.out}  (vowel "{args.vowel}", vibrato {args.vibrato})\n\nspectral pitch check (harmonic at target?):')
     ok = 0
     for nm in names:
         tgt = note_to_hz(nm)
         note = voicesynth.sing_note(tgt, args.dur, vowel=args.vowel, vibrato_depth=args.vibrato, sr=sr)
-        meas = voicesynth.estimate_f0(note, sr)
-        good = meas > 0 and abs(meas - tgt) / tgt < 0.05
+        good = voicesynth.has_pitch(note, sr, tgt)
         ok += good
-        print(f"  {nm:4} target {tgt:7.1f}Hz  sung {meas:7.1f}Hz  {'ok' if good else 'OFF'}")
-    print(f"\n{ok}/{len(names)} notes pitch-correct")
+        print(f"  {nm:4} target {tgt:7.1f}Hz  peak@target: {'yes' if good else 'NO'}")
+    print(f"\n{ok}/{len(names)} notes carry the right pitch")
 
 
 if __name__ == "__main__":

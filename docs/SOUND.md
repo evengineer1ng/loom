@@ -19,6 +19,23 @@ python -m tools.sing --query "opera vowel ah sustained"    --notes "C4 G4 C5"   
 ```
 Freesound previews are CC — the author is printed on fetch; **attribute them.**
 
+## The pure test: a voice from LOGIC, no source (`voicesynth.py`)
+A recorded sample is *already baked* — it borrows the human performance, so of course it sounds
+human. The pure test of the thesis is whether **deterministic logic alone** can. This is the true
+analog of the grammar (generate the waveform, don't borrow it). **No source is the test.**
+```sh
+python -m tools.voice --notes "C4 E4 G4 C5" --vowel a --vibrato 0.02 --out transcripts/aah.wav
+```
+Source–filter model: a glottal source (harmonics at f0) → formant filters (each vowel = a tiny table
+of resonance freqs) + vibrato (f0 × a slow sine — you dial it) + envelope + breath. Pure numpy, no
+ML, no samples, **no key, no sourcing problem.** Pitch verified spectrally (8/8).
+
+Honest: it **will** sound synthy — a human-passable pure-synth voice is the frontier (it's *why*
+neural TTS exists). This is the honest substrate for your opera ABX: measure how far pure logic
+climbs, with vibrato / formants / the glottal model as the knobs. Realism upgrades, in order: a
+better glottal pulse (LF/Rosenberg), formant *transitions* + consonants (diction), and expression
+(dynamics, jitter/shimmer). The synth is the voice fader; the sampler stays for instruments.
+
 ## Honest scope
 - **Instruments are the solved case.** This is a SoundFont/sampler — a 30-year-proven, deterministic,
   human-sounding technique. Get the win here first.

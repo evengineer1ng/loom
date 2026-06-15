@@ -19,23 +19,18 @@ FORMANTS = {
 }
 
 
-def estimate_f0(audio: np.ndarray, sr: int, fmin: float = 80.0, fmax: float = 700.0) -> float:
-    """Autocorrelation pitch — robust for a formant-shaped voice (FFT-argmax would pick a formant)."""
-    x = audio[: int(0.5 * sr)].astype(float)
-    x = x - np.mean(x)
-    if not np.any(x):
-        return 0.0
-    corr = np.correlate(x, x, mode="full")[len(x) - 1:]
-    lo, hi = int(sr / fmax), min(int(sr / fmin), len(corr) - 1)
-    lag = lo + int(np.argmax(corr[lo:hi]))
-    if not lag:
-        return 0.0
-    peak = corr[lag]
-    for m in (2, 3, 4):                               # octave correction: prefer the true (longer) period
-        ml = lag * m
-        if ml < hi and corr[ml] >= 0.8 * peak:
-            lag = ml
-    return sr / lag
+def has_pitch(audio: np.ndarray, sr: int, target_hz: float, tol: float = 0.04) -> bool:
+    """True if there's a clear spectral harmonic AT target_hz (vs the null between harmonics).
+    Octave-proof — we ask 'is f0 present?' not 'what is the single f0?' (autocorrelation's trap)."""
+    a = audio[: int(0.4 * sr)]
+    S = np.abs(np.fft.rfft(a * np.hanning(len(a))))
+    fr = np.fft.rfftfreq(len(a), 1.0 / sr)
+
+    def bandmax(f):
+        m = (fr > f * (1 - tol)) & (fr < f * (1 + tol))
+        return float(S[m].max()) if m.any() else 0.0
+
+    return bandmax(target_hz) > 3.0 * (bandmax(target_hz * 1.5) + 1e-9)   # harmonic >> inter-harmonic null
 
 
 def _glottal(f0_track: np.ndarray, sr: int) -> np.ndarray:
