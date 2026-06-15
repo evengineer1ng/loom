@@ -30,6 +30,10 @@ Desktop.ini
 
 # Regenerable caches & outputs (tapes/grammars under data/ ARE tracked; these are not)
 data/f1_cache/
+data/loomspeech/
 exports/
 transcripts/
 *.spec.bak
+
+# NCM bridge runtime files (written by the relay / game)
+integrations/ncm/bridge/
