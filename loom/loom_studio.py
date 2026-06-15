@@ -18,8 +18,11 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+except ImportError:  # tkinter is an optional system package (python3-tk); absent in headless/CI
+    tk = filedialog = messagebox = ttk = None
 from typing import Any, Dict, List, Optional
 
 import yaml

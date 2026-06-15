@@ -16,12 +16,16 @@ import sys
 import tempfile
 import threading
 import time
-import tkinter as tk
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import filedialog, messagebox
 from typing import Any, Dict, List, Optional
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+except ImportError:  # tkinter is an optional system package (python3-tk); absent in headless/CI
+    tk = filedialog = messagebox = None
 
 import oradio_player
 import oradio_resolver

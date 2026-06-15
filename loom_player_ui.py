@@ -14,14 +14,21 @@ import queue
 import threading
 import time
 import traceback
-import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import messagebox
 from typing import Any, Dict, List, Optional
 
+try:
+    import tkinter as tk
+    from tkinter import messagebox
+except ImportError:  # tkinter is an optional system package (python3-tk); absent in headless/CI
+    tk = messagebox = None
+
 import yaml
-from PIL import ImageTk
+try:
+    from PIL import ImageTk
+except ImportError:  # PIL.ImageTk imports tkinter (optional system pkg); GUI-only
+    ImageTk = None
 
 import app_paths
 import provisioning

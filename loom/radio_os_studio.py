@@ -21,12 +21,16 @@ import sys
 import tempfile
 import threading
 import time
-import tkinter as tk
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+except ImportError:  # tkinter is an optional system package (python3-tk); absent in headless/CI
+    tk = filedialog = messagebox = ttk = None
 
 import yaml
 

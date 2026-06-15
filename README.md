@@ -90,6 +90,10 @@ python -m oradio_engine club            # endpoint capability status
 pytest                    # engine + shim + format test suite
 ```
 
+The suite runs headless (no `tkinter` needed). The desktop GUIs are optional — to launch
+those, install Tk: `apt install python3-tk` (Debian/Ubuntu) or `brew install python-tk` (macOS).
+Windows ships Tk with the python.org installer.
+
 ## The 5-verb organ contract
 
 Every organ federates through one interface (`oradio_engine/contract.py`):

@@ -21,8 +21,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import tkinter as tk
-from tkinter import filedialog
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+except ImportError:  # tkinter is an optional system package (python3-tk); absent in headless/CI
+    tk = filedialog = None
 
 from oradio_engine.antenna import Antenna, Source
 from oradio_engine.mix import LiveNarrator, Mixer
