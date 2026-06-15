@@ -258,8 +258,11 @@ function melody(n,scale,shape){ if(n<=1)return [scale[0]]; const o=[],L=scale.le
  o[o.length-1]=scale[0]; return o; }                                // cadence: every line resolves to the tonic = the "."
 // LEXICAL pitch: a word always hashes to the SAME scale degree -> the same note, everywhere, forever.
 // This is the shift from a tune (where the word SITS) to a vocabulary (what the word IS). Deterministic.
-function wordNote(word,scale){ let h=2166136261; const w=(word||"").toLowerCase();
- for(const c of w) h=(h^c.charCodeAt(0))*16777619>>>0; return scale[h%scale.length]; }
+function wordMotif(word,scale){ let h=2166136261; const w=(word||"").toLowerCase();
+ for(const c of w) h=(h^c.charCodeAt(0))*16777619>>>0;
+ const n=1+(w.length%3), out=[];                                    // 1..3 notes -> hundreds of unique tokens
+ for(let i=0;i<n;i++){ out.push(scale[h%scale.length]); h=(h*16777619+2654435761)>>>0; }
+ return out; }
 function lexicalOn(){ const p=document.getElementById('pitch'); return p && p.value==='word'; }
 
 // -- the two primitives: a voiced segment (pitched, through formants) and a noise burst (a consonant) --
@@ -317,7 +320,7 @@ function renderSyllable(s,freq,t,dur,vib,wave,Q,bright){
 function singLineNotes(text,style,vib,k){                            // "notes": a fixed vowel per pitch
  const words=(text.match(/[A-Za-z']+/g)||["la"]);
  const scale=SCALES[style.scale]||SCALES.pent;
- const mel = lexicalOn() ? words.map(w=>wordNote(w,scale))           // word -> its fixed note
+ const mel = lexicalOn() ? words.flatMap(w=>wordMotif(w,scale))      // word -> its fixed little motif
                          : melody(words.length,scale,style.shape);   // or the positional arc
  let t=ctx.currentTime+0.03;
  mel.forEach((f,i)=>{ const d=style.dur*k.tempo*(style.swing?(i%2?1-style.swing:1+style.swing):1);
@@ -327,8 +330,8 @@ function singLineNotes(text,style,vib,k){                            // "notes":
 function singLineWords(text,style,vib,k){                            // "words": articulate the real syllables
  const words=(text.match(/[A-Za-z']+/g)||[]);
  const scale=SCALES[style.scale]||SCALES.pent; let syl=[];
- words.forEach(w=>{ const ss=syllables(w), note=wordNote(w,scale);   // every syllable carries its WORD's note
-   ss.forEach(s=>{ s.note=note; }); if(ss.length) ss[ss.length-1].wordEnd=true; syl=syl.concat(ss); });
+ words.forEach(w=>{ const ss=syllables(w), motif=wordMotif(w,scale); // syllables ride the WORD's motif
+   ss.forEach((s,j)=>{ s.note=motif[j%motif.length]; }); if(ss.length) ss[ss.length-1].wordEnd=true; syl=syl.concat(ss); });
  if(!syl.length) syl=[{onset:"",vowel:'u',coda:"",note:scale[0],wordEnd:true}];
  const arc=melody(syl.length,scale,style.shape), lex=lexicalOn();
  let t=ctx.currentTime+0.03;
