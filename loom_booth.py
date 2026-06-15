@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parent
 GRAMMAR_DIR = ROOT / "data" / "grammars"
 VERBS = str(ROOT / "data" / "english" / "irregular_verbs.json")
 VOICE_CHOICES = ["intern", "town_crier", "prime_minister"]
+COLOR_MODELS = ["phi3:3.8b", "qwen3:8b", "tinyllama:1.1b", "smollm2:135m"]
 SAPI_VOICE = {"intern": "Microsoft David Desktop",
               "town_crier": "Microsoft Hazel Desktop",
               "prime_minister": "Microsoft Zira Desktop"}
@@ -44,6 +45,8 @@ FADERS = [
     ("curiosity", "scale", {"from": 0, "to": 3, "res": 1, "label": "CURIOSITY (questions born)"}),
     ("continuity", "toggle", {"label": "CONTINUITY (carry state)"}),
     ("voice", "choice", {"options": VOICE_CHOICES, "label": "VOICE (the pedal)"}),
+    ("color", "toggle", {"label": "COLOR (guarded flair)"}),
+    ("color_model", "choice", {"options": COLOR_MODELS, "label": "COLOR MODEL"}),
 ]
 
 UI = {"bg": "#0c0d10", "panel": "#16181d", "line": "#2b2f37", "text": "#eef1f4",
@@ -109,6 +112,15 @@ class BoothApp:
         self.mixer = Mixer()
         self.rig = SpeechRig()
         self._grammars: Dict[str, Grammar] = {}
+        self._colorists: Dict[str, Any] = {}
+        self.entities = set()                       # driver vocabulary, for the colorist's guard
+        for s in self.antenna.sources:
+            for e in s.events:
+                if e.get("actor"):
+                    self.entities.add(e["actor"])
+                o = e.get("object", "")
+                if o and o[:1].isupper():
+                    self.entities.add(o)
         self.tempo_ms = 2500
         self.playing = False
         self.after_id = None
@@ -126,6 +138,12 @@ class BoothApp:
         if v not in self._grammars:
             self._grammars[v] = Grammar.from_file(str(GRAMMAR_DIR / f"{v}.json"), verbs=VERBS)
         return self._grammars[v]
+
+    def _colorist(self, model: str):
+        if model not in self._colorists:
+            from colorist import Colorist
+            self._colorists[model] = Colorist(model)
+        return self._colorists[model]
 
     def _rebuild_narrator(self) -> None:
         self.narrator = LiveNarrator(self.antenna.stream(), rules=self.rules)
@@ -232,6 +250,8 @@ class BoothApp:
                 return
         else:
             lap, line = result
+            if self.mixer.color:                    # guarded LLM flair (falls back to the mirror)
+                line = self._colorist(self.mixer.color_model).colorize(line, self.entities)
             self.last_line = (f"[lap {lap}] " if lap else "") + line
             self.now_var.set(self.last_line)
             self.tape_list.insert("end", self.last_line)

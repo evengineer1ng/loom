@@ -32,6 +32,8 @@ class Mixer:
     salience: float = 0.7        # min_priority to narrate
     continuity: bool = True
     voice: str = "intern"        # which grammar speaks (a pedal: live-swappable)
+    color: bool = False          # guarded LLM flair on top of the mirror (a pedal)
+    color_model: str = "qwen3:8b"   # which local model paints (applied by the endpoint, not here)
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
