@@ -46,6 +46,9 @@
    <label>sing <select id=artic>
      <option value=notes>notes (vowels)</option>
      <option value=words>words (diction)</option></select></label>
+   <label>pitch <select id=pitch>
+     <option value=arc>arc (the shape)</option>
+     <option value=word>word = note</option></select></label>
    <label><input type=checkbox id=loop checked> loop</label>
  </div>
 
@@ -253,6 +256,11 @@ function melody(n,scale,shape){ if(n<=1)return [scale[0]]; const o=[],L=scale.le
    else                    k=Math.round((L-1)*(1-Math.abs(2*x-1))); // arch (opera)
    o.push(scale[k]); }
  o[o.length-1]=scale[0]; return o; }                                // cadence: every line resolves to the tonic = the "."
+// LEXICAL pitch: a word always hashes to the SAME scale degree -> the same note, everywhere, forever.
+// This is the shift from a tune (where the word SITS) to a vocabulary (what the word IS). Deterministic.
+function wordNote(word,scale){ let h=2166136261; const w=(word||"").toLowerCase();
+ for(const c of w) h=(h^c.charCodeAt(0))*16777619>>>0; return scale[h%scale.length]; }
+function lexicalOn(){ const p=document.getElementById('pitch'); return p && p.value==='word'; }
 
 // -- the two primitives: a voiced segment (pitched, through formants) and a noise burst (a consonant) --
 function noiseBuf(dur){const n=Math.max(1,Math.floor(ctx.sampleRate*dur));const b=ctx.createBuffer(1,n,ctx.sampleRate);
@@ -308,20 +316,25 @@ function renderSyllable(s,freq,t,dur,vib,wave,Q,bright){
 }
 function singLineNotes(text,style,vib,k){                            // "notes": a fixed vowel per pitch
  const words=(text.match(/[A-Za-z']+/g)||["la"]);
- const scale=SCALES[style.scale]||SCALES.pent, mel=melody(words.length,scale,style.shape);
+ const scale=SCALES[style.scale]||SCALES.pent;
+ const mel = lexicalOn() ? words.map(w=>wordNote(w,scale))           // word -> its fixed note
+                         : melody(words.length,scale,style.shape);   // or the positional arc
  let t=ctx.currentTime+0.03;
  mel.forEach((f,i)=>{ const d=style.dur*k.tempo*(style.swing?(i%2?1-style.swing:1+style.swing):1);
    voiceSeg(f,t,d,vib,style.wave,[700,1220,2600],0.33,k.Q); t+=d; });
  return (t-ctx.currentTime);
 }
 function singLineWords(text,style,vib,k){                            // "words": articulate the real syllables
- const words=(text.match(/[A-Za-z']+/g)||[]); let syl=[];
- words.forEach(w=>{ const s=syllables(w); if(s.length){ s[s.length-1].wordEnd=true; syl=syl.concat(s); } });
- if(!syl.length) syl=[{onset:"",vowel:'u',coda:"",wordEnd:true}];
- const scale=SCALES[style.scale]||SCALES.pent, mel=melody(syl.length,scale,style.shape);
+ const words=(text.match(/[A-Za-z']+/g)||[]);
+ const scale=SCALES[style.scale]||SCALES.pent; let syl=[];
+ words.forEach(w=>{ const ss=syllables(w), note=wordNote(w,scale);   // every syllable carries its WORD's note
+   ss.forEach(s=>{ s.note=note; }); if(ss.length) ss[ss.length-1].wordEnd=true; syl=syl.concat(ss); });
+ if(!syl.length) syl=[{onset:"",vowel:'u',coda:"",note:scale[0],wordEnd:true}];
+ const arc=melody(syl.length,scale,style.shape), lex=lexicalOn();
  let t=ctx.currentTime+0.03;
- syl.forEach((s,i)=>{ const d=style.dur*k.tempo*(style.swing?(i%2?1-style.swing:1+style.swing):1);
-   t=renderSyllable(s,mel[i],t,d,vib,style.wave,k.Q,k.bright);
+ syl.forEach((s,i)=>{ const f = lex ? s.note : arc[i];               // word's fixed note, or the positional arc
+   const d=style.dur*k.tempo*(style.swing?(i%2?1-style.swing:1+style.swing):1);
+   t=renderSyllable(s,f,t,d,vib,style.wave,k.Q,k.bright);
    if(s.wordEnd) t+=0.05*k.tempo; });                                // a small breath between words
  return (t-ctx.currentTime);
 }
