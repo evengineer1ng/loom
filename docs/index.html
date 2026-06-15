@@ -28,8 +28,18 @@
  <div class=row>
    <button id=play>&#9654; play</button>
    <label>tape <select id=tape></select></label>
-   <label>voice <select id=voice><option value=town_crier>town crier</option><option value=intern>intern</option></select></label>
-   <label>mode <select id=mode><option value=sing>sing (opera)</option><option value=speak>speak</option></select></label>
+   <label>voice <select id=voice>
+     <option value=town_crier>town crier</option><option value=intern>intern</option>
+     <option value=engineer>engineer</option><option value=philosopher>philosopher</option>
+     <option value=normal>normal person</option><option value=commuter>commuter</option>
+     <option value=office>office worker</option><option value=construction>construction worker</option>
+     <option value=foreman>foreman</option><option value=firefighter>firefighter</option>
+     <option value=politician>politician</option><option value=hockey>hockey player</option>
+     <option value=astronaut>astronaut</option></select></label>
+   <label>style <select id=mode>
+     <option value=opera>opera</option><option value=rap>rap</option>
+     <option value=blues>blues</option><option value=country>country</option>
+     <option value=speak>speak</option><option value=podcast>podcast</option></select></label>
    <label>vibrato <input type=range id=vib min=0 max=0.06 step=0.005 value=0.035></label>
    <label><input type=checkbox id=loop checked> loop</label>
  </div>
@@ -71,11 +81,34 @@ const TAPES = {
 const VERBS={overtake:"overtook",make:"made",rise:"rose",take:"took",seize:"seized",get:"got",run:"ran",
  hit:"hit",set:"set",put:"put",pit:"pitted",clock:"clocked",miss:"missed",rebound:"rebounded",spike:"spiked",
  settle:"settled",move:"moved",go:"went",come:"came",fall:"fell",break:"broke",hold:"held",win:"won",lose:"lost"};
+// a VOICE is pure data: an opener, transitions, and codas keyed by valence. The engine is unchanged.
 const GRAMMARS={
  town_crier:{opener:"Hear ye! ",transitions:["","Anon, ","And lo, "],
    codas:{hype:[", hear it well!"," — rejoice!"],alarm:[" — beware!"],calm:[", and all is well."],"*":[", so it is told."]}},
  intern:{opener:"",transitions:["","Then ","And "],
-   codas:{hype:["!"," — huge!"],alarm:["...","— uh oh."],calm:["."],"*":["."]}}
+   codas:{hype:["!"," — huge!"],alarm:["...","— uh oh."],calm:["."],"*":["."]}},
+ engineer:{opener:"",transitions:["","Next, ","Then "],
+   codas:{hype:[" — nominal."," — within spec."],alarm:[" — out of tolerance."],calm:[" — steady."],"*":[", logged."]}},
+ philosopher:{opener:"Consider: ",transitions:["","And yet ","Thus "],
+   codas:{hype:[" — and what does it mean?"],alarm:[" — a warning, perhaps."],calm:[", and so we rest."],"*":[", one supposes."]}},
+ normal:{opener:"",transitions:["","So ","Then "],
+   codas:{hype:[", nice!"],alarm:[", uh oh."],calm:["."],"*":["."]}},
+ commuter:{opener:"",transitions:["","Meanwhile, ","Up next, "],
+   codas:{hype:[" — finally."],alarm:[" — great, just great."],calm:[", on schedule."],"*":[", same as ever."]}},
+ office:{opener:"",transitions:["","Circling back, ","Per the update, "],
+   codas:{hype:[" — big win."],alarm:[" — flagging this."],calm:[", noted."],"*":[", FYI."]}},
+ construction:{opener:"",transitions:["","Right, ","Now "],
+   codas:{hype:[" — solid."],alarm:[" — watch it!"],calm:[", all set."],"*":[", done."]}},
+ foreman:{opener:"Listen up. ",transitions:["","Move it, ","Next "],
+   codas:{hype:[" — good work."],alarm:[" — fix it, now."],calm:[", on track."],"*":[", keep moving."]}},
+ firefighter:{opener:"Copy. ",transitions:["","Be advised, ","On it — "],
+   codas:{hype:[" — confirmed."],alarm:[" — go, go, go!"],calm:[", all clear."],"*":[", over."]}},
+ politician:{opener:"My friends, ",transitions:["","Let me be clear, ","And make no mistake, "],
+   codas:{hype:[" — and that's a promise."],alarm:[" — but we will prevail."],calm:[", together."],"*":[", believe me."]}},
+ hockey:{opener:"",transitions:["","Off the rush, ","In tight, "],
+   codas:{hype:[" — he scores!"],alarm:[" — to the box."],calm:[", icing it."],"*":[", good shift."]}},
+ astronaut:{opener:"Houston, ",transitions:["","Telemetry shows ","Copy, "],
+   codas:{hype:[" — we have liftoff."],alarm:[" — abort criteria."],calm:[", all systems nominal."],"*":[", over."]}}
 };
 // ---- narration (a port of the engine's grammar) ----
 function regPast(v){ if(!v)return v; if(v.endsWith("e"))return v+"d";
@@ -108,12 +141,31 @@ function linesFor(){
 }
 // ---- the synth (Web Audio = source -> formant filters -> envelope, + vibrato) ----
 let ctx, analyser;
-const SCALE=[220.00,261.63,293.66,329.63,392.00,440.00,523.25];   // A-minor pentatonic
-function melody(n){ if(n<=1)return [SCALE[0]]; const o=[];
- for(let i=0;i<n;i++){const x=i/(n-1),a=1-Math.abs(2*x-1);o.push(SCALE[Math.round((SCALE.length-1)*a)]);}
- o[o.length-1]=SCALE[0]; return o; }
-function singNote(freq,t,dur,vib){
- const osc=ctx.createOscillator(); osc.type="sawtooth"; osc.frequency.setValueAtTime(freq,t);
+const SCALES={
+ pent:[220.00,261.63,293.66,329.63,392.00,440.00,523.25],   // A-minor pentatonic
+ blues:[220.00,261.63,293.66,311.13,329.63,392.00,440.00],  // A blues (flat third)
+ major:[220.00,246.94,277.18,329.63,369.99,440.00,493.88],  // A major-ish
+ narrow:[220.00,233.08,246.94]                              // speech band (rap)
+};
+// a STYLE is pure data too: which notes, how fast, how much vibrato, the melodic shape, swing, timbre.
+const STYLES={
+ opera:  {scale:"pent",  dur:0.32, vib:null,  shape:"arch", swing:0,    wave:"sawtooth"},
+ rap:    {scale:"narrow",dur:0.17, vib:0.004, shape:"flat", swing:0,    wave:"sawtooth"},
+ blues:  {scale:"blues", dur:0.38, vib:0.03,  shape:"fall", swing:0.4,  wave:"sawtooth"},
+ country:{scale:"major", dur:0.30, vib:0.015, shape:"wave", swing:0.15, wave:"triangle"},
+ speak:  {speak:true},
+ podcast:{speak:true, rate:0.95, pitch:0.9}
+};
+function melody(n,scale,shape){ if(n<=1)return [scale[0]]; const o=[],L=scale.length;
+ for(let i=0;i<n;i++){const x=i/(n-1); let k;
+   if(shape==="flat")      k=i%2;                                   // near-monotone (speech-like)
+   else if(shape==="fall") k=Math.round((L-1)*(1-x));               // descending
+   else if(shape==="wave") k=(i%2)?Math.min(L-1,3):0;               // alternating
+   else                    k=Math.round((L-1)*(1-Math.abs(2*x-1))); // arch (opera)
+   o.push(scale[k]); }
+ o[o.length-1]=scale[0]; return o; }                                // cadence: every line resolves to the tonic = the "."
+function singNote(freq,t,dur,vib,wave){
+ const osc=ctx.createOscillator(); osc.type=wave||"sawtooth"; osc.frequency.setValueAtTime(freq,t);
  if(vib>0){const lfo=ctx.createOscillator();lfo.frequency.value=5.5;const lg=ctx.createGain();
    lg.gain.value=freq*vib;lfo.connect(lg);lg.connect(osc.frequency);lfo.start(t);lfo.stop(t+dur);}
  const sum=ctx.createGain(); sum.gain.value=0.33;
@@ -123,9 +175,15 @@ function singNote(freq,t,dur,vib){
  env.gain.linearRampToValueAtTime(0,t+dur);
  sum.connect(env); env.connect(analyser); osc.start(t); osc.stop(t+dur+0.02);
 }
-function singLineDur(text,vib){
- const words=(text.match(/[A-Za-z']+/g)||["la"]); const mel=melody(words.length); const d=0.32;
- let t=ctx.currentTime+0.03; for(const f of mel){singNote(f,t,d,vib);t+=d;} return (t-ctx.currentTime);
+function singLineDur(text,style,vibSlider){
+ const words=(text.match(/[A-Za-z']+/g)||["la"]);
+ const scale=SCALES[style.scale]||SCALES.pent;
+ const mel=melody(words.length,scale,style.shape);
+ const vib=(style.vib==null?vibSlider:style.vib);              // opera follows the slider; others set their own
+ let t=ctx.currentTime+0.03;
+ mel.forEach((f,i)=>{ const d=style.dur*(style.swing?(i%2?1-style.swing:1+style.swing):1);  // swing = long/short pairs
+   singNote(f,t,d,vib,style.wave); t+=d; });
+ return (t-ctx.currentTime);
 }
 // ---- transport ----
 let playing=false, idx=0, lines=[];
@@ -141,10 +199,12 @@ function step(){
  if(!playing)return;
  if(idx>=lines.length){ if(document.getElementById('loop').checked){idx=0;} else {playing=false;document.getElementById('play').innerHTML='&#9654; play';document.getElementById('now').textContent='— end of tape —';return;} }
  const text=lines[idx++]; document.getElementById('now').textContent=text;
- const mode=document.getElementById('mode').value, vib=parseFloat(document.getElementById('vib').value);
- if(mode==="speak" && window.speechSynthesis){ const u=new SpeechSynthesisUtterance(text);
-   u.onend=()=>setTimeout(step,250); speechSynthesis.cancel(); speechSynthesis.speak(u); }
- else { const dur=singLineDur(text,vib); setTimeout(step,(dur+0.25)*1000); }
+ const style=STYLES[document.getElementById('mode').value]||STYLES.opera;
+ const vibSlider=parseFloat(document.getElementById('vib').value);
+ if(style.speak && window.speechSynthesis){ const u=new SpeechSynthesisUtterance(text);
+   if(style.rate)u.rate=style.rate; if(style.pitch)u.pitch=style.pitch;
+   u.onend=()=>setTimeout(step,200); speechSynthesis.cancel(); speechSynthesis.speak(u); }
+ else { const dur=singLineDur(text,style,vibSlider); setTimeout(step,(dur+0.22)*1000); }
 }
 document.getElementById('play').onclick=()=>{
  if(playing){playing=false;document.getElementById('play').innerHTML='&#9654; play';if(window.speechSynthesis)speechSynthesis.cancel();return;}
