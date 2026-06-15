@@ -47,6 +47,38 @@ only said *"Lawson pits"*). The deterministic renderer cannot do this — it ren
 4. **One domain, N=50.** The *direction* is robust; a paper-grade rate needs more events, models,
    and domains.
 
+## Context-budget test — what happens as you load up the input
+
+Reproduce: `python -m tools.context_benchmark` (set `OPENAI_API_KEY` + `--openai-model` for a
+frontier column). A **canary** is planted at lap 0 (*"Bottas stalled at lights out"*); each system
+is asked *"what happened at the start?"* while the event log **doubles**. The LLM (`llama3.1:8b`,
+`num_ctx=8192`) truncates oldest-first when the log overflows — so it forgets the start.
+
+| events | det (ms / recalls start) | local 8B (ms / ctx tokens / recalls start) |
+|---:|---|---|
+| 8 | 0.00 · **yes** | 6,841 · 125 · yes |
+| 64 | 0.00 · **yes** | 8,414 · 703 · yes |
+| 256 | 0.00 · **yes** | 32,646 · 2,673 · yes |
+| 512 | 0.00 · **yes** | 80,196 · 5,313 · yes |
+| **1024** | 0.00 · **yes** | **246,138 · 8,192 · NO** ← crossover |
+| 2048 | 0.00 · **yes** | 248,140 · 8,192 · NO |
+| 4096 | 0.00 · **yes** | 248,530 · 8,192 · NO |
+
+**Findings:** (1) at ~1024 events the context saturates (`ctx tokens` pins at 8,192) and the model
+**silently forgets lap 0** — it answers confidently from a truncated race, no error raised. (2)
+Latency detonates *before* the break: 6.8 s → 80 s → **246 s** (≈4 min for one wrong answer).
+(3) Deterministic recalls the start in **O(1)** at every scale, 0 ms, no context limit — past the
+crossover it is the *only* system still correct.
+
+**Caveats:** `num_ctx=8192` is the budget set for this run; a bigger window (llama 128k, frontier
+256k+) moves the crossover *later* but does not remove it — and the latency/cost growth with input,
+plus documented "lost-in-the-middle" degradation *within* the window, remain. The deterministic
+0 ms is O(1) canary recall; a full running summary is O(n) but still trivial and unbounded.
+
+**Frontier (ChatGPT 5.x):** not run — requires an API key; no fabricated numbers. *Expected*
+shape: crossover much later (large window) but the same latency/cost growth and the same eventual
+truncation + in-window recall decay. Will be added as a measured column when a key is supplied.
+
 ## The takeaway (the project's thesis, measured)
 Don't put the LLM in the runtime to *narrate*. Use it at **compile time** to *author* the
 deterministic renderer (the grammar, the rules). Then narration is free, instant, reproducible, and
