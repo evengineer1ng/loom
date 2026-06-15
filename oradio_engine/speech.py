@@ -65,7 +65,10 @@ def article(word: str) -> str:
 
 
 def regular_past(verb: str) -> str:
-    """Regular-English past for any verb the table doesn't cover — the floor, not the grammar."""
+    """Regular-English past for any verb the table doesn't cover — the floor, not the grammar.
+    Handles monosyllabic consonant-doubling (drop->dropped, jam->jammed) without over-doubling
+    polysyllables (open->opened, whisper->whispered)."""
+    import re as _re
     v = (verb or "").strip()
     if not v:
         return v
@@ -73,6 +76,10 @@ def regular_past(verb: str) -> str:
         return v + "d"
     if len(v) > 2 and v[-1] == "y" and v[-2] not in "aeiou":
         return v[:-1] + "ied"
+    # double a final consonant only for a single-vowel-group (monosyllabic) CVC word
+    if (len(_re.findall(r"[aeiou]+", v)) == 1 and len(v) >= 3
+            and v[-1] not in "aeiouwxy" and v[-2] in "aeiou" and v[-3] not in "aeiou"):
+        return v + v[-1] + "ed"
     return v + "ed"
 
 

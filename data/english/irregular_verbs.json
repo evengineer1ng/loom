@@ -1,8 +1,20 @@
 {
-  "overtake": "overtook", "make": "made", "rise": "rose", "take": "took",
-  "seize": "seized", "get": "got", "run": "ran", "hit": "hit", "set": "set",
-  "put": "put", "pit": "pitted", "begin": "began", "build": "built", "fall": "fell",
-  "go": "went", "come": "came", "break": "broke", "catch": "caught", "hold": "held",
-  "lead": "led", "lose": "lost", "win": "won", "drive": "drove", "sink": "sank",
-  "spike": "spiked", "settle": "settled", "move": "moved", "clock": "clocked"
+  "overtake": "overtook", "make": "made", "rise": "rose", "take": "took", "seize": "seized",
+  "get": "got", "run": "ran", "hit": "hit", "set": "set", "put": "put", "pit": "pitted",
+  "begin": "began", "build": "built", "fall": "fell", "go": "went", "come": "came",
+  "break": "broke", "catch": "caught", "hold": "held", "lead": "led", "lose": "lost", "win": "won",
+  "drive": "drove", "sink": "sank", "spike": "spiked", "settle": "settled", "move": "moved", "clock": "clocked",
+
+  "grow": "grew", "spread": "spread", "give": "gave", "see": "saw", "know": "knew", "throw": "threw",
+  "blow": "blew", "fly": "flew", "draw": "drew", "feel": "felt", "keep": "kept", "sleep": "slept",
+  "leave": "left", "mean": "meant", "meet": "met", "sit": "sat", "stand": "stood", "send": "sent",
+  "spend": "spent", "lend": "lent", "bend": "bent", "find": "found", "wind": "wound", "tell": "told",
+  "sell": "sold", "buy": "bought", "bring": "brought", "think": "thought", "teach": "taught",
+  "fight": "fought", "seek": "sought", "swim": "swam", "ring": "rang", "sing": "sang", "drink": "drank",
+  "swing": "swung", "hang": "hung", "stick": "stuck", "strike": "struck", "dig": "dug", "spin": "spun",
+  "shoot": "shot", "freeze": "froze", "choose": "chose", "speak": "spoke", "wake": "woke", "ride": "rode",
+  "write": "wrote", "eat": "ate", "beat": "beat", "bite": "bit", "hide": "hid", "become": "became",
+  "cut": "cut", "let": "let", "shut": "shut", "cost": "cost", "hurt": "hurt", "burst": "burst",
+  "read": "read", "feed": "fed", "bleed": "bled", "speed": "sped", "light": "lit", "deal": "dealt",
+  "shake": "shook", "tear": "tore", "wear": "wore", "bear": "bore", "burn": "burnt", "creep": "crept"
 }

@@ -22,6 +22,10 @@ def test_number_to_words():
 def test_regular_past_fallback():
     assert regular_past("clock") == "clocked"
     assert regular_past("settle") == "settled"
+    assert regular_past("drop") == "dropped"      # monosyllabic CVC doubles
+    assert regular_past("jam") == "jammed"
+    assert regular_past("open") == "opened"        # polysyllable does NOT over-double
+    assert regular_past("whisper") == "whispered"
 
 
 def test_roles_from_tags_is_contract_safe_channel():
