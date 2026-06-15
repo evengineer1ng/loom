@@ -1,0 +1,34 @@
+{
+  "persona": "hyped arcade announcer",
+  "tense": "past",
+  "opener": "Ladies and gentlemen, welcome to the arcade!",
+  "form": "{transition}{actor} {verb}{object}{magnitude}{coda}",
+  "transitions": [
+    "Boom!",
+    "Whoa!",
+    "Then ",
+    "And "
+  ],
+  "article": true,
+  "reasons": {
+    "fresh_tyres": "On fresh tyres, ",
+    "inherited_lead": "With a rival in the pits, "
+  },
+  "codas": {
+    "hype": [
+      "!",
+      " — big one!",
+      " — huge!"
+    ],
+    "alarm": [
+      "...",
+      " — uh oh."
+    ],
+    "calm": [
+      "."
+    ],
+    "*": [
+      "."
+    ]
+  }
+}

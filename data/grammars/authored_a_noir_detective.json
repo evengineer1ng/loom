@@ -1,0 +1,34 @@
+{
+  "persona": "noir detective",
+  "tense": "past",
+  "opener": "It was a dark and stormy night...",
+  "form": "{transition}{actor} {verb}{object}{magnitude}{coda}",
+  "transitions": [
+    "The rain was falling hard as ",
+    "Through the fog, ",
+    "Then ",
+    "And "
+  ],
+  "article": true,
+  "reasons": {
+    "fresh_tyres": "On the edge of the case, ",
+    "inherited_lead": "With a killer in the shadows, "
+  },
+  "codas": {
+    "hype": [
+      "!",
+      " — big one!",
+      " — huge!"
+    ],
+    "alarm": [
+      "...",
+      " — uh oh."
+    ],
+    "calm": [
+      "."
+    ],
+    "*": [
+      "."
+    ]
+  }
+}
