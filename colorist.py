@@ -9,12 +9,9 @@ the decoder stays stdlib+PyYAML pure.
 """
 from __future__ import annotations
 
-import json
 import re
-import urllib.request
 from typing import Callable, Iterable, Optional
 
-OLLAMA = "http://127.0.0.1:11434/api/generate"
 TEAMS = ["mercedes", "ferrari", "red bull", "mclaren", "aston martin", "racing point",
          "alpine", "williams", "haas", "alphatauri", "sauber", "racing bulls"]
 WRONG_SPORT = ["soccer", "nba", "nascar", "basketball", "football", "hockey", "baseball", "tennis"]
@@ -49,12 +46,8 @@ class Colorist:
         self.model = model
 
     def _generate(self, prompt: str) -> str:
-        body = {"model": self.model, "prompt": prompt, "stream": False, "think": False,
-                "options": {"temperature": 0.6, "num_predict": 40}}
-        req = urllib.request.Request(OLLAMA, data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json"})
-        resp = json.load(urllib.request.urlopen(req, timeout=60))
-        return re.sub(r"(?is)<think>.*?</think>", "", resp.get("response") or "").strip()
+        from llm_client import complete       # pluggable: local Ollama or any OpenAI-compatible
+        return complete(prompt, model=self.model, temperature=0.6, num_predict=40)[0]
 
     def colorize(self, line: str, entities: Iterable[str], *, gen: Optional[Callable[[str], str]] = None) -> str:
         """Return a flaired version of `line`, or `line` unchanged if the model hallucinates."""

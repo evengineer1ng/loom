@@ -1,95 +1,98 @@
-"""The meta-layer: turn ANY domain idea into a running deterministic narrator.
+"""loom, headless — the booth without a GUI. Idea OR tape -> threaded narration -> spoken.
 
-You describe a domain (even an absurd one). A local LLM authors a small loom pipeline — a sample
-TAPE (role-tagged rows) + a GRAMMAR (voice) — under a STRICT schema. We then VALIDATE by actually
-running it through the deterministic engine; if it doesn't parse/compile/narrate, we feed the error
-back and retry. Output is the narration + the saved artifacts. The model authors once; the engine
-renders deterministically (faithful-by-construction, proven in tests/test_receipts.py).
+  python -m tools.loomify --tape data/f1_barcelona_2026.json --voice town_crier --speak
+  python -m tools.loomify --idea "a haunted office printer" --depth 2 --speak
 
-This is "vibe coders make no mistakes": the guarantee is the VALIDATOR, not the prompt — anything
-that doesn't run is rejected. Declarative only (no arbitrary code executed).
+Authors a tape from an idea via the pluggable LLM (llm_client — local or any OpenAI-compatible),
+or loads an existing tape; runs the deterministic pipeline (threads), narrates in a vetted voice,
+and speaks it cross-platform (speech_out: Windows/Mac/Linux/Android-Termux).
 
-    python -m tools.loomify --model qwen3:8b "a haunted office printer"
+KEY: only --idea (authoring) touches an LLM. --tape playback is pure Python + KB files + TTS — no
+GPU, no model — so it runs anywhere, phone included. The model thinks once; the tape replays free.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import urllib.request
 
-from oradio_engine.speech import Grammar
-
-OLLAMA = "http://127.0.0.1:11434/api/generate"
-VERBS = json.load(open("data/english/irregular_verbs.json", encoding="utf-8"))
+from oradio_engine.antenna import load_tape
+from oradio_engine.speech import Grammar, roles_from_tags
+from oradio_engine.thread import narrate_salient
 
 SCHEMA = """Output ONLY a JSON object: {"tape": [...rows...]}.
 A row = {"tags": ["actor:NAME","action:VERB","object:THING","magnitude:NUMBER","unit:UNIT","valence:hype|alarm|calm"],
          "priority": 0.7}. Rules:
-- actor and action are REQUIRED. action MUST be a plain present-tense verb lemma (spike, drop, jam,
-  open, fail, whisper) — the engine conjugates it to past tense itself. Do NOT past-tense it.
-- object/magnitude/unit/valence optional. valence is exactly one of hype/alarm/calm if present.
+- actor and action REQUIRED. action MUST be a plain present-tense verb lemma (spike, drop, jam, open,
+  fail, whisper) — the engine conjugates it. Do NOT past-tense it.
+- object/magnitude/unit/valence optional. valence is exactly hype/alarm/calm if present.
 - Reuse the SAME few actor names across rows so a thread forms. 7 rows telling a tiny story.
 Output JSON only, no prose."""
 
 
-def gen(prompt, model):
-    body = {"model": model, "prompt": prompt, "stream": False, "think": False,
-            "options": {"temperature": 0.4, "num_predict": 700}}
-    req = urllib.request.Request(OLLAMA, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-    resp = json.load(urllib.request.urlopen(req, timeout=180))
-    return re.sub(r"(?is)<think>.*?</think>", "", resp.get("response") or "")
-
-
-def loomify(idea, model, grammar_file, feedback=""):
-    prompt = f"{SCHEMA}\n\nDOMAIN IDEA: \"{idea}\"\n{feedback}"
-    raw = gen(prompt, model)
+def author_tape(idea, feedback=""):
+    from llm_client import complete
+    raw, _ = complete(f"{SCHEMA}\n\nDOMAIN IDEA: \"{idea}\"\n{feedback}", num_predict=700, temperature=0.4)
     m = re.search(r"\{.*\}", raw, re.S)
     if not m:
-        raise ValueError("no JSON in output")
-    obj = json.loads(m.group(0))
-    tape = obj["tape"]
-    g = Grammar.from_file(grammar_file, verbs="data/english/irregular_verbs.json")  # vetted voice, reused
-    lines = []
-    for row in tape:
-        roles = {}
-        for t in row.get("tags", []):
-            if ":" in t:
-                k, v = t.split(":", 1)
-                roles[k] = v.replace("_", " ")
-        if not roles.get("action"):
-            continue
-        line = g.line(roles, key=str(row.get("tags")))
-        if not line.strip():
-            raise ValueError("a row narrated to empty text")
-        lines.append(line)
-    if len(lines) < 3:
-        raise ValueError("too few narratable rows")
-    return lines
+        raise ValueError("no JSON in model output")
+    return json.loads(m.group(0))["tape"]
+
+
+def _rows_to_events(rows):
+    out = []
+    for r in rows:
+        e = roles_from_tags(r.get("tags", []))
+        e["lap"] = next((t.split(":", 1)[1] for t in r.get("tags", []) if t.startswith("lap:")), "")
+        e["priority"] = r.get("priority", 0.7)
+        out.append(e)
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="qwen3:8b")
+    ap.add_argument("--idea", default="")
+    ap.add_argument("--tape", default="")
     ap.add_argument("--voice", default="intern")
-    ap.add_argument("idea", nargs="+")
+    ap.add_argument("--depth", type=int, default=2)
+    ap.add_argument("--flavour", default="both")
+    ap.add_argument("--salience", type=float, default=0.0)
+    ap.add_argument("--rules", default="")
+    ap.add_argument("--speak", action="store_true")
     args = ap.parse_args()
-    idea = " ".join(args.idea)
-    grammar_file = f"data/grammars/{args.voice}.json"
 
-    print(f'\n=== loomify · "{idea}" · {args.model} · voice={args.voice} ===\n')
-    feedback = ""
-    for attempt in (1, 2, 3):
-        try:
-            lines = loomify(idea, args.model, grammar_file, feedback)
-            print(f"[compiled on attempt {attempt}]\n")
-            for ln in lines:
-                print("  " + ln)
-            return
-        except Exception as exc:
-            feedback = f"Your previous output FAILED validation: {type(exc).__name__}: {exc}. Output STRICT JSON only."
-            print(f"  (attempt {attempt} rejected: {type(exc).__name__}: {str(exc)[:70]})")
-    print("\n  could not produce a running pipeline in 3 tries — honest failure, the validator held.")
+    if args.tape:
+        events = load_tape(args.tape)
+        print(f'=== loom · tape={args.tape} · voice={args.voice} ===\n')
+    elif args.idea:
+        print(f'=== loom · idea="{args.idea}" · voice={args.voice} ===\n')
+        tape, feedback = None, ""
+        for attempt in (1, 2, 3):
+            try:
+                tape = author_tape(args.idea, feedback); break
+            except Exception as exc:
+                feedback = f"Previous output failed: {exc}. Output STRICT JSON only."
+                print(f"  (author attempt {attempt} rejected: {type(exc).__name__})")
+        if not tape:
+            raise SystemExit("could not author a tape in 3 tries")
+        events = _rows_to_events(tape)
+    else:
+        raise SystemExit("give --idea \"...\" or --tape path")
+
+    grammar = Grammar.from_file(f"data/grammars/{args.voice}.json", verbs="data/english/irregular_verbs.json")
+    rules = json.load(open(args.rules, encoding="utf-8")) if args.rules else None
+    stories = narrate_salient(events, grammar, depth=args.depth, rules=rules,
+                              min_priority=args.salience, flavour=args.flavour)
+
+    speak = None
+    if args.speak:
+        from speech_out import backend, say
+        speak = say
+        print(f"[speaking via {backend()}]\n")
+    for lap, line in stories:
+        print((f"[lap {lap}] " if lap else "") + line)
+        if speak:
+            speak(line)
 
 
 if __name__ == "__main__":

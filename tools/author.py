@@ -14,11 +14,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import urllib.request
 
 from oradio_engine.speech import Grammar
 
-OLLAMA = "http://127.0.0.1:11434/api/generate"
 EXAMPLE = json.load(open("data/grammars/intern.json", encoding="utf-8"))
 VERBS = "data/english/irregular_verbs.json"
 SAMPLE = {"actor": "Hamilton", "action": "overtake", "object": "Norris", "valence": "hype", "_key": "1"}
@@ -26,11 +24,8 @@ UNIVERSE = {"Hamilton", "Norris", "Verstappen", "Leclerc", "Russell"}
 
 
 def _gen(prompt, model):
-    body = {"model": model, "prompt": prompt, "stream": False, "think": False,
-            "options": {"temperature": 0.3, "num_predict": 400}}
-    req = urllib.request.Request(OLLAMA, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-    resp = json.load(urllib.request.urlopen(req, timeout=120))
-    return re.sub(r"(?is)<think>.*?</think>", "", resp.get("response") or "")
+    from llm_client import complete       # pluggable: local Ollama or any OpenAI-compatible
+    return complete(prompt, model=model, temperature=0.3, num_predict=400)[0]
 
 
 def author(persona, model):
