@@ -31,7 +31,8 @@ That's it — it serves `index.html`, runs in their browser, ~10KB.
 ## 2. The benchmark (the thing that earns engagement)
 Point them at [`bench/`](../bench) — a deterministic encoder that mints unlimited labeled
 `(text → audio)` pairs, a scorer, and a non-ML baseline (~43% word accuracy) to beat. The task:
-**decode the audio back to the text.** If they can, it's a language.
+**decode the audio back to the text.** Near 100% proves a **lossless, model-free code**; whether
+that code is a *language* is the open question you're posing, not a claim you're planting.
 
 ## How to post (in order of leverage)
 - **HF Post** (the feed on hf.co) + a **Forum** thread (discuss.huggingface.co → *Research* or
@@ -40,12 +41,12 @@ Point them at [`bench/`](../bench) — a deterministic encoder that mints unlimi
 > Built a deterministic codec that turns any event stream — a race, a heartbeat, a sentence — into
 > sung language. No model, no server, ~10KB. Each word maps to a fixed musical motif, so it's
 > **reversible**.
-> Two questions for this crowd:
-> 1. It emits unlimited (text→audio) pairs for free, and a pitch-only baseline already decodes ~43%.
->    **Can you train a model to beat that and recover the text?** If you can, it's a language.
-> 2. Where's the real line between what a deterministic codec can *faithfully* say vs what genuinely
->    needs a generative model?
-> Live in your browser: [Space link] · benchmark: [repo link]. Roast it.
+> It's reversible. I wrote a benchmark that emits unlimited (text→audio) pairs, and a dumb pitch-only
+> baseline already recovers ~43% of words from sound alone — throwing the vowels away.
+> So: how high can you push it? Near 100% means the meaning survives all the way into sound and
+> back — a lossless code, no weights. And then the question I actually care about: **where's the line
+> between a code you can decode and a language?** I don't know. I'd rather find out than guess.
+> Beat 43%: [benchmark link]. Or just listen and tell me what you hear: [Space link].
 
 **Framing note:** don't ask "is it AI?" — ask the decode challenge. It turns *"no model"* from a
 shrug into a puzzle, and the absence of weights becomes the interesting part. Stay humble: it's

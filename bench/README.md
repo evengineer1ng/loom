@@ -1,9 +1,11 @@
 # loomspeech — a decode benchmark
 
-**Claim under test:** loom deterministically compresses text into sung audio. If that audio is a
-*language*, a model should be able to **listen and recover the text.** This benchmark hands you an
-encoder that mints unlimited, free, perfectly-labeled `(text → audio)` pairs and asks you to invert
-it.
+**Claim under test (modest, provable):** loom deterministically compresses text into sung audio,
+and the meaning *survives* — a model should be able to **listen and recover the text.** If it can,
+this is a **lossless, model-free code**. Whether a recoverable code rises to a *language* (human-
+learnable, conventional, productive) is the open question, not the claim. This benchmark measures
+recoverability: it hands you an encoder that mints unlimited, free, perfectly-labeled
+`(text → audio)` pairs and asks you to invert it.
 
 ## The task
 Given a `.wav`, predict the source text. The encoder maps each **word → a fixed 1–3 note motif**
@@ -37,8 +39,10 @@ vocabulary. The headroom is the point:
 - a real model should need **no lexicon** and should **survive noise** (add some and see).
 
 ## The two questions (what to actually answer)
-1. **Is it a language?** How close to 100% can a model decode the audio back to text? If high, the
-   codec carries the meaning losslessly — it *is* a language, learnable by ear or by net.
+1. **How recoverable is it?** How close to 100% can a model decode the audio back to text? Near
+   100% proves a **lossless code** — the meaning survives sound and comes back. The *open* part:
+   at what point is a recoverable code a **language** (decodable by a human ear, not just a net)
+   rather than a cipher? The benchmark measures the necessary condition, not the whole claim.
 2. **Where's the boundary?** loom is the deterministic extreme — faithful, ~free, no model. Where
    does a generative model actually become *necessary* vs a deterministic codec being enough?
 
