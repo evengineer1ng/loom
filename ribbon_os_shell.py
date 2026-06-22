@@ -135,11 +135,19 @@ DEFAULT_LOOM_ID = "default"   # LEGACY door key (pre loom-switching); migrated b
 SPEED_OF_LIGHT_MAX = 6.0
 SPEED_OF_LIGHT_GAIN = 0.9
 
-# The reskinned ribbon-os Bookmark — the .oradio authoring surface — lives in the oracle-radio
-# project. It MUST run with that directory as cwd so its `bookmark/` brick package imports.
-ORADIO_BOOKMARK_DIR = r"C:\Users\evana\OneDrive\Documents\oracle-radio"
+# The reskinned ribbon-os Bookmark — the .oradio authoring surface — lives in THIS project. It MUST
+# run with the project dir as cwd so its `bookmark/` brick package imports. Portable: the project IS
+# wherever the repo was cloned (BASE), not a hardcoded path.
+ORADIO_BOOKMARK_DIR = BASE
 ORADIO_BOOKMARK = os.path.join(ORADIO_BOOKMARK_DIR, "bookmark.py")
-RIBBON_OS_MEDIA_ROOT = r"C:\Users\evana\OneDrive\Documents\ribbon-os-(4.5)\videos"
+# Ribbon media (boot/pts/skins) lives OUTSIDE the repo (it's large). Portable resolution: the
+# RIBBON_OS_MEDIA_ROOT env var, else a repo-relative `media/` if present, else the dev machine's
+# copy. Missing media degrades gracefully (RibbonVideoSurface.play just returns False).
+RIBBON_OS_MEDIA_ROOT = (
+    os.environ.get("RIBBON_OS_MEDIA_ROOT")
+    or (os.path.join(BASE, "media") if os.path.isdir(os.path.join(BASE, "media")) else "")
+    or r"C:\Users\evana\OneDrive\Documents\ribbon-os-(4.5)\videos"
+)
 RIBBON_OS_RIBBON_ROOT = os.path.join(RIBBON_OS_MEDIA_ROOT, "ribbon")
 
 # The fixed ribbon-skin vocabulary: the folders under videos/ribbon/, each holding
@@ -1303,6 +1311,30 @@ def _discover_all_looms() -> List[Tuple[Path, str, str]]:
     return out
 
 
+def _resolve_loom_oradio(loom_path: Path, raw: str) -> Path:
+    """Resolve a loom node's `oradio` path PORTABLY. A loom may carry an ABSOLUTE path baked on
+    another machine (e.g. C:/Users/evana/.../exports/kernel.oradio) — useless on a fresh clone/VM.
+    Resolution order: the path as-given if it exists; else relative to the loom dir; else the
+    basename under the loom dir and under <loom dir>/exports and <repo>/exports. So a cloned loom
+    finds its oradios wherever the repo now lives. Returns the first existing candidate (or the
+    plain join if none, so the caller still gets a sane path)."""
+    p = Path(raw)
+    tries = []
+    if p.is_absolute():
+        tries.append(p)
+    else:
+        tries.append((loom_path.parent / p))
+    name = p.name
+    tries += [loom_path.parent / name, loom_path.parent / "exports" / name, Path(BASE) / "exports" / name]
+    for t in tries:
+        try:
+            if t.exists():
+                return t.resolve()
+        except OSError:
+            continue
+    return (tries[0]).resolve()
+
+
 def load_oradio_shell_items_for(loom_path: Optional[Path]) -> List[StationInfo]:
     """Build the carousel's StationInfo list from a specific .loom (or the standalone-oradio
     fallback when `loom_path` is None / empty). Parametrized form of load_oradio_shell_items so
@@ -1314,9 +1346,7 @@ def load_oradio_shell_items_for(loom_path: Optional[Path]) -> List[StationInfo]:
             graph = LoomGraph(universe="", oradios=())
         items: List[StationInfo] = []
         for node in graph.oradios:
-            candidate = Path(node.oradio)
-            if not candidate.is_absolute():
-                candidate = (loom_path.parent / candidate).resolve()
+            candidate = _resolve_loom_oradio(loom_path, node.oradio)
             descriptor = _read_oradio_descriptor(str(candidate))
             items.append(
                 StationInfo(

@@ -168,7 +168,13 @@ def upsert_oradio_into_loom(
     identity = read_oradio_identity(oradio_path)
     node_id = slugify_node(identity["id"])
     node_label = label.strip() or identity["title"]
-    target_path = str(oradio_path.resolve()).replace("\\", "/")
+    # Store the oradio path RELATIVE to the loom when it lives under the loom's dir (the repo) — so a
+    # cloned loom finds its oradios wherever the repo now lives, not at a baked C:\Users\... path.
+    abs_o = oradio_path.resolve()
+    try:
+        target_path = str(abs_o.relative_to(loom_path.parent.resolve())).replace("\\", "/")
+    except ValueError:
+        target_path = str(abs_o).replace("\\", "/")
     soulmate_ids = [str(item).strip() for item in (soulmate_ids or []) if str(item).strip() and str(item).strip() != node_id]
     valid_ids = {str(node.get("id", "")).strip() for node in nodes if str(node.get("id", "")).strip()}
     missing = [item for item in soulmate_ids if item not in valid_ids]
