@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Club</title>
+  <style>
+    :root { --bg:#07090f; --panel:#161d33; --edge:rgba(111,140,255,.25); --text:#eef1fb;
+            --muted:#a6b4d8; --accent:#6f8cff; --gold:#f4c66b; --warm:rgba(244,198,107,.16); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body { background:
+             radial-gradient(900px 460px at 18% -8%, rgba(244,198,107,.12), transparent 60%),
+             radial-gradient(ellipse at top, #1a2440, var(--bg));
+           color: var(--text); font: 15px/1.6 "Segoe UI", system-ui, sans-serif; padding: 2.2rem; }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    h1 { margin: 0 0 .35rem; font-size: 1.95rem; letter-spacing:-.01em; }
+    .kicker { color: var(--gold); letter-spacing:.14em; text-transform:uppercase; font-size:.72rem;
+              font-weight:700; }
+    p.lede { color: var(--muted); margin:.3rem 0 .4rem; font-size:1.02rem; }
+    p.lede strong { color: var(--text); font-weight:600; }
+    .host { color: var(--gold); font-size:.85rem; margin:0 0 1.4rem; font-style:italic; opacity:.9; }
+    .card { background: linear-gradient(180deg, rgba(22,29,51,.72), rgba(18,24,44,.6));
+            border:1px solid var(--edge); border-radius:16px; padding:1.1rem 1.3rem; margin:.85rem 0;
+            box-shadow: 0 1px 0 rgba(255,255,255,.03) inset; }
+    .card h2 { margin:0 0 .25rem; font-size:1.05rem; }
+    .card p { margin:.1rem 0 0; color: var(--muted); font-size:.92rem; }
+    .row { display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.75rem; }
+    .meta { color:var(--muted); font-size:.8rem; margin-top:.45rem; }
+    button { background: rgba(111,140,255,.14); color: var(--text); border:1px solid var(--edge);
+             border-radius:11px; padding:.55rem .95rem; font:inherit; cursor:pointer;
+             transition: transform .08s ease, filter .12s ease; }
+    button.primary { background: linear-gradient(180deg, var(--gold), #e0ad4c); border-color: var(--gold);
+                     color:#241804; font-weight:700; box-shadow: 0 6px 18px rgba(244,198,107,.22); }
+    button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .seg { display:flex; gap:.4rem; }
+    .seg button { flex:1; }
+    .tag { font-size:.72rem; color:var(--accent); border:1px solid var(--edge); border-radius:999px;
+           padding:.05rem .5rem; }
+    .question { font-size:1.08rem; font-weight:600; margin-bottom:.15rem; }
+    .step { color: var(--gold); font-weight:700; margin-right:.35rem; }
+    .choice-group { display:flex; gap:.55rem; flex-wrap:wrap; margin-top:.9rem; }
+    .choice { min-width:140px; text-align:left; }
+    .choice strong { display:block; font-size:.94rem; }
+    .choice small { display:block; color:var(--muted); margin-top:.2rem; line-height:1.35; }
+    .selected { background: linear-gradient(180deg, var(--gold), #e0ad4c); border-color: var(--gold); color:#241804; }
+    .selected small { color:#4a3a12; }
+    .toolbar { display:flex; gap:.6rem; flex-wrap:wrap; margin:1.2rem 0 1.3rem; }
+    .summary { background: rgba(10,14,26,.6); border:1px dashed var(--edge); border-radius:14px;
+               padding:1rem 1.1rem; color:var(--muted); }
+    .summary strong { color:var(--gold); font-weight:600; }
+    .readiness { margin-top: 1rem; background: rgba(10,14,26,.7); border:1px solid var(--edge);
+                 border-radius:14px; padding:1rem 1.1rem; }
+    .readiness h2 { margin:0 0 .35rem; font-size:1rem; }
+    .status-line { font-size:.92rem; color:var(--muted); margin:.2rem 0 .8rem; }
+    .pill { display:inline-block; font-size:.74rem; border-radius:999px; padding:.15rem .55rem;
+            margin-left:.5rem; border:1px solid var(--edge); }
+    .ok { color:#97e0ac; border-color:rgba(151,224,172,.35); background:rgba(151,224,172,.08); }
+    .warn { color:#f4c66b; border-color:rgba(244,198,107,.35); background:rgba(244,198,107,.08); }
+    .bad { color:#ff9b9b; border-color:rgba(255,155,155,.35); background:rgba(255,155,155,.08); }
+    .probe-list { display:grid; gap:.6rem; }
+    .probe-card { border:1px solid rgba(111,140,255,.18); border-radius:12px; padding:.8rem .9rem;
+                  background:rgba(255,255,255,.02); }
+    .probe-card strong { display:block; margin-bottom:.2rem; }
+    .probe-card small { display:block; color:var(--muted); line-height:1.45; }
+    footer { color:var(--muted); font-size:.82rem; margin-top:1.6rem; border-top:1px solid var(--edge);
+             padding-top:1rem; }
+    #log { margin-top:1rem; font-size:.82rem; color:var(--muted); min-height:1.2em; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="kicker">🎟️ The Club</div>
+    <h1>Pull up a chair — welcome in.</h1>
+    <p class="lede">You opened an oradio, so the doors are open. The Club is how oradios <strong>arrive</strong>
+      and how their pieces get sorted out for you — it's a brick, the highest one, and it works for you.
+      <strong>Nothing lands on your machine without your nod.</strong></p>
+    <p class="host">Take what you want, leave the rest. You can always come back for more.</p>
+
+    <div class="toolbar">
+      <button id="launch-backend" class="primary">Open the doors</button>
+      <button id="apply-setup">Set me up</button>
+    </div>
+
+    <div class="card">
+      <div class="question"><span class="step">1.</span>How would you like to open oradios here?</div>
+      <p>Most folks set the runtime up once and never think about it again.</p>
+      <div class="choice-group" id="runtime-choices"></div>
+    </div>
+
+    <div class="card">
+      <div class="question"><span class="step">2.</span>How many bricks should we bring along?</div>
+      <p>Travel light, take the handy set, or grab the whole garden — your call.</p>
+      <div class="choice-group" id="bricks-choices"></div>
+    </div>
+
+    <div class="card">
+      <div class="question"><span class="step">3.</span>Anything heavier for the road?</div>
+      <p>Atlas is the determinism substrate; the Gallery is a shelf of public oradios to explore.</p>
+      <div class="choice-group" id="extras-choices"></div>
+    </div>
+
+    <div class="summary" id="summary"></div>
+    <div class="readiness">
+      <h2>Machine readiness</h2>
+      <div class="status-line" id="readiness-status">Checking what this machine already has...</div>
+      <div class="probe-list" id="readiness-list"></div>
+    </div>
+
+    <div id="log" aria-live="polite"></div>
+    <footer>The Club's always open — drop back in any time to add, remove, or freshen up your bricks and packages.</footer>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const summaryEl = document.getElementById('summary');
+    const selections = {
+      runtime: { packageId: 'ribbon-os', profileId: 'standard', label: 'Standard runtime' },
+      bricks: { packageId: 'radio-bricks', profileId: 'recommended', label: 'Recommended bricks' },
+      extras: { packageId: 'oradio-gallery', profileId: 'featured', label: 'Featured gallery' }
+    };
+    const fallbackManifest = {
+      bootstrap_required: true,
+      bootstrap_artifacts: ['RibbonOS Bootstrap', 'kernel.oradio'],
+      packages: [
+        {
+          id: 'ribbon-os',
+          title: 'RibbonOS Runtime',
+          kind: 'runtime',
+          summary: 'The opener, player, Club wiring, render path, and install/update runtime.',
+          source_repo: 'ribbon-os',
+          install_mode: 'recommended',
+          size_class: 'normal',
+          profiles: [{ id: 'standard', label: 'Standard', default: true }]
+        },
+        {
+          id: 'kernel',
+          title: 'Kernel',
+          kind: 'kernel',
+          summary: 'The canonical kernel artifact, lineage authority, mint policy, and export fixtures.',
+          source_repo: 'kernel',
+          install_mode: 'required',
+          size_class: 'tiny',
+          profiles: [{ id: 'canonical', label: 'Canonical', default: true }]
+        },
+        {
+          id: 'radio-bricks',
+          title: 'Radio Bricks',
+          kind: 'bricks',
+          summary: 'The mined shared brick garden: Python, HTML, JSON, and future concept bricks.',
+          source_repo: 'radio-bricks',
+          install_mode: 'optional',
+          size_class: 'large',
+          profiles: [
+            { id: 'core', label: 'Core', default: true },
+            { id: 'recommended', label: 'Recommended', default: false },
+            { id: 'all', label: 'All', default: false },
+            { id: 'custom', label: 'Pick & Choose', default: false }
+          ]
+        },
+        {
+          id: 'atlas',
+          title: 'Atlas Determinism',
+          kind: 'atlas',
+          summary: 'The determinism engine, loombit substrate, and heavyweight shard/bank/dict payloads.',
+          source_repo: 'atlas',
+          install_mode: 'optional',
+          size_class: 'heavy',
+          profiles: [
+            { id: 'engine-only', label: 'Engine Only', default: true },
+            { id: 'banks', label: 'Banks', default: false },
+            { id: 'full', label: 'Full', default: false }
+          ]
+        },
+        {
+          id: 'oradio-gallery',
+          title: 'Oradio Gallery',
+          kind: 'gallery',
+          summary: 'Public example .oradio artifacts, loom graphs, and showcase stations.',
+          source_repo: 'oradio-gallery',
+          install_mode: 'optional',
+          size_class: 'normal',
+          profiles: [
+            { id: 'featured', label: 'Featured', default: true },
+            { id: 'all', label: 'All', default: false }
+          ]
+        }
+      ]
+    };
+
+    function setLog(text) {
+      log.textContent = text;
+    }
+
+    function pill(label, cls) {
+      return '<span class="pill ' + cls + '">' + label + '</span>';
+    }
+
+    function setSummary(manifest) {
+      const bits = [];
+      bits.push('<strong>Bootstrap:</strong> ' + (manifest.bootstrap_artifacts || []).join(' + '));
+      bits.push('<strong>Runtime:</strong> ' + selections.runtime.label);
+      bits.push('<strong>Bricks:</strong> ' + selections.bricks.label);
+      bits.push('<strong>Extras:</strong> ' + selections.extras.label);
+      summaryEl.innerHTML = bits.join('<br />');
+    }
+
+    function renderReadiness(report, modeLabel) {
+      const status = document.getElementById('readiness-status');
+      const host = document.getElementById('readiness-list');
+      host.innerHTML = '';
+      if (!report) {
+        status.textContent = modeLabel + ' - readiness details are unavailable, but Club can still queue setup.';
+        return;
+      }
+
+      if (report.ready) {
+        status.innerHTML = modeLabel + ' - this machine looks ready for the required packages.' + pill('ready', 'ok');
+      } else {
+        status.innerHTML = modeLabel + ' - some required pieces are missing, so Club should sort them before launch.' + pill('needs setup', 'bad');
+      }
+
+      (report.packages || []).forEach(pkg => {
+        (pkg.dependency_bundles || []).forEach(bundle => {
+          if (bundle.ok && !bundle.required) {
+            return;
+          }
+          const card = document.createElement('div');
+          card.className = 'probe-card';
+          const state = bundle.ok
+            ? pill(bundle.required ? 'required ready' : 'ready', 'ok')
+            : pill(bundle.required ? 'required missing' : 'optional missing', bundle.required ? 'bad' : 'warn');
+          const missing = bundle.missing && bundle.missing.length ? bundle.missing.join(', ') : 'nothing missing';
+          card.innerHTML = '<strong>' + pkg.title + ' - ' + bundle.label + ' ' + state + '</strong>' +
+            '<small>Missing: ' + missing + '</small>' +
+            '<small>' + (bundle.fix_hint || '') + '</small>';
+          host.appendChild(card);
+        });
+      });
+
+      if (!host.innerHTML) {
+        host.innerHTML = '<div class="probe-card"><strong>No missing bundles detected.</strong><small>Club can still queue packages, but the required dependency bundles appear present.</small></div>';
+      }
+    }
+
+    async function launchBackend() {
+      try {
+        const res = await fetch('/api/launch-backend', { method: 'POST' });
+        const payload = await res.json();
+        if (!payload.ok) {
+          throw new Error(payload.error || 'launch failed');
+        }
+        setLog('Launched backend: ' + (payload.command || []).join(' '));
+      } catch (_err) {
+        setLog('Offline Club preview: backend launch is not available from this page. Open through Bookmark or run oradio_player.py locally.');
+      }
+    }
+
+    function recordOfflineIntent(packageId, profileId) {
+      const key = 'club.offline.requests';
+      let rows = [];
+      try {
+        rows = JSON.parse(localStorage.getItem(key) || '[]');
+      } catch (_err) {
+        rows = [];
+      }
+      rows.push({
+        package_id: packageId,
+        profile_id: profileId,
+        action: 'install',
+        created_at: Date.now()
+      });
+      localStorage.setItem(key, JSON.stringify(rows));
+    }
+
+    async function requestInstall(packageId, profileId) {
+      try {
+        const res = await fetch('/api/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ package_id: packageId, profile_id: profileId, action: 'install' })
+        });
+        const payload = await res.json();
+        if (!payload.ok) {
+          throw new Error(payload.error || 'unknown error');
+        }
+        setLog('Recorded install request: ' + packageId + ' / ' + profileId + ' - installer fulfillment comes next.');
+      } catch (_err) {
+        recordOfflineIntent(packageId, profileId);
+        setLog('Club is in graceful offline mode. Saved local install intent: ' + packageId + ' / ' + profileId + '.');
+      }
+    }
+
+    function renderChoices(hostId, options, selectedKey, onPick) {
+      const host = document.getElementById(hostId);
+      host.innerHTML = '';
+      options.forEach(option => {
+        const btn = document.createElement('button');
+        btn.className = 'choice' + (option.key === selectedKey ? ' selected' : '');
+        btn.innerHTML = '<strong>' + option.label + '</strong><small>' + option.desc + '</small>';
+        btn.addEventListener('click', () => onPick(option));
+        host.appendChild(btn);
+      });
+    }
+
+    function renderManifest(manifest, modeLabel) {
+      const runtimeOptions = [
+        { key: 'standard', label: 'Standard', desc: 'Install the normal RibbonOS runtime.', packageId: 'ribbon-os', profileId: 'standard' },
+        { key: 'skip', label: 'Already Have It', desc: 'Skip runtime install for now.', packageId: 'ribbon-os', profileId: 'standard' }
+      ];
+      const brickOptions = [
+        { key: 'core', label: 'Core', desc: 'Small starter brick set.', packageId: 'radio-bricks', profileId: 'core' },
+        { key: 'recommended', label: 'Recommended', desc: 'Best default working garden.', packageId: 'radio-bricks', profileId: 'recommended' },
+        { key: 'all', label: 'All', desc: 'Everything current.', packageId: 'radio-bricks', profileId: 'all' },
+        { key: 'none', label: 'None', desc: 'No extra bricks yet.', packageId: 'radio-bricks', profileId: 'core' }
+      ];
+      const extrasOptions = [
+        { key: 'gallery', label: 'Gallery', desc: 'Featured public oradios.', packageId: 'oradio-gallery', profileId: 'featured' },
+        { key: 'atlas-engine', label: 'Atlas Engine', desc: 'Determinism engine only.', packageId: 'atlas', profileId: 'engine-only' },
+        { key: 'atlas-full', label: 'Atlas Full', desc: 'Engine plus heavier banks.', packageId: 'atlas', profileId: 'full' },
+        { key: 'none', label: 'None', desc: 'Keep this first install light.', packageId: 'oradio-gallery', profileId: 'featured' }
+      ];
+
+      renderChoices('runtime-choices', runtimeOptions, selections.runtime.profileId === 'standard' ? 'standard' : 'skip', option => {
+        selections.runtime = {
+          packageId: option.packageId,
+          profileId: option.profileId,
+          label: option.label === 'Already Have It' ? 'Skip runtime install' : option.label + ' runtime'
+        };
+        renderManifest(manifest, modeLabel);
+      });
+      renderChoices('bricks-choices', brickOptions, selections.bricks.profileId, option => {
+        selections.bricks = {
+          packageId: option.packageId,
+          profileId: option.profileId,
+          label: option.label === 'None' ? 'No extra bricks yet' : option.label + ' bricks'
+        };
+        renderManifest(manifest, modeLabel);
+      });
+      renderChoices('extras-choices', extrasOptions, selections.extras.label === 'No heavy extras' ? 'none' : (selections.extras.profileId === 'full' ? 'atlas-full' : selections.extras.profileId === 'engine-only' ? 'atlas-engine' : 'gallery'), option => {
+        selections.extras = {
+          packageId: option.packageId,
+          profileId: option.profileId,
+          label: option.label === 'None' ? 'No heavy extras' : option.label
+        };
+        renderManifest(manifest, modeLabel);
+      });
+      setSummary(manifest);
+      setLog(modeLabel + ' - bootstrap path: ' + (manifest.bootstrap_artifacts || []).join(' + '));
+    }
+
+    async function applySetup() {
+      const queue = [];
+      if (selections.runtime.label !== 'Skip runtime install') {
+        queue.push([selections.runtime.packageId, selections.runtime.profileId]);
+      }
+      if (selections.bricks.label !== 'No extra bricks yet') {
+        queue.push([selections.bricks.packageId, selections.bricks.profileId]);
+      }
+      if (selections.extras.label !== 'No heavy extras') {
+        queue.push([selections.extras.packageId, selections.extras.profileId]);
+      }
+      if (!queue.length) {
+        setLog('Nothing queued yet - this machine is staying lean for now.');
+        return;
+      }
+      for (const [packageId, profileId] of queue) {
+        await requestInstall(packageId, profileId);
+      }
+      setLog('Queued setup: ' + queue.map(item => item[0] + '/' + item[1]).join(', '));
+    }
+
+    async function fetchReadiness(modeLabel) {
+      try {
+        const res = await fetch('/api/readiness');
+        if (!res.ok) {
+          throw new Error('readiness unavailable');
+        }
+        const report = await res.json();
+        renderReadiness(report, modeLabel);
+      } catch (_err) {
+        renderReadiness(null, modeLabel);
+      }
+    }
+
+    async function boot() {
+      try {
+        const res = await fetch('/api/manifest');
+        if (!res.ok) {
+          throw new Error('manifest unavailable');
+        }
+        const manifest = await res.json();
+        renderManifest(manifest, 'Live Club');
+        fetchReadiness('Live Club');
+      } catch (_err) {
+        renderManifest(fallbackManifest, 'Offline Club preview');
+        renderReadiness(null, 'Offline Club preview');
+      }
+    }
+
+    boot();
+    document.getElementById('launch-backend').addEventListener('click', launchBackend);
+    document.getElementById('apply-setup').addEventListener('click', applySetup);
+  </script>
+</body>
+</html>

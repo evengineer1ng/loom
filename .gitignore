@@ -31,9 +31,25 @@ Desktop.ini
 # Regenerable caches & outputs (tapes/grammars under data/ ARE tracked; these are not)
 data/f1_cache/
 data/loomspeech/
-exports/
+# exports/ holds regenerable mints EXCEPT the genesis kernel.oradio, which is a tracked artifact
+# (it was lost once because this whole dir was ignored — never again).
+exports/*
+!exports/kernel.oradio
 transcripts/
 *.spec.bak
+
+# Club = baked/cached relationship media (crossovers, doors, pts, loop/thumb caches). Machine-side,
+# regenerable from the oradios + engine; never in the repo.
+club/
+
+# Runtime state written by the running shell/station (not source)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+station_memory.json
+status.json
+.active_loom.json
+.switch_request
 
 # NCM bridge runtime files (written by the relay / game)
 integrations/ncm/bridge/

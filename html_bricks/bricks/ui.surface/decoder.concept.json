@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "ui.surface.decoder",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "D:/openclaw/opencloset/decoder.html",
+  "version": "1.0.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["surface.html", "decoder"],
+  "side_effects": [],
+  "ui_slots": [],
+  "tags": ["html", "surface", "foundation", "decoder"],
+  "emoji": "🔣",
+  "description": "The timestamp decoder HTML surface as a foundation brick. An oradio can open straight to it."
+}

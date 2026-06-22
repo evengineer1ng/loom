@@ -29,6 +29,10 @@ try:
     from PIL import ImageTk
 except ImportError:  # PIL.ImageTk imports tkinter (optional system pkg); GUI-only
     ImageTk = None
+try:
+    import pygame
+except ImportError:  # optional endpoint dependency
+    pygame = None
 
 import app_paths
 import provisioning
@@ -72,6 +76,23 @@ FONT_H1 = ("Segoe UI", 20, "bold")
 FONT_H2 = ("Segoe UI", 14, "bold")
 FONT_BODY = ("Segoe UI", 10)
 FONT_SMALL = ("Segoe UI", 9)
+
+
+def soundtrack_decl(descriptor: Dict[str, Any]) -> Dict[str, Any]:
+    value = descriptor.get("soundtrack")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def soundtrack_path(descriptor: Dict[str, Any]) -> str:
+    return str(soundtrack_decl(descriptor).get("path") or "")
+
+
+def soundtrack_fade_sec(descriptor: Dict[str, Any]) -> float:
+    raw = soundtrack_decl(descriptor).get("fade_sec")
+    try:
+        return max(0.0, float(raw if raw is not None else 1.25))
+    except (TypeError, ValueError):
+        return 1.25
 
 
 def is_descriptor_oradio(path: Path) -> bool:
@@ -204,6 +225,79 @@ class VoiceSpeaker:
         self.speak(self.next_voice(), text)
 
 
+class SoundtrackBed:
+    """Optional looping soundtrack layer for Loom descriptors.
+
+    Endpoint-only: if pygame is unavailable or the file is missing, playback degrades calmly and
+    the Loom still opens.
+    """
+
+    def __init__(self, descriptor: Dict[str, Any], descriptor_path: Path) -> None:
+        self.path = resolve_media_path(descriptor_path, soundtrack_path(descriptor))
+        self.fade_sec = soundtrack_fade_sec(descriptor)
+        self.last_error = ""
+        self._ready = False
+        self._loaded = False
+        self._playing = False
+
+        if self.path is None:
+            return
+        if pygame is None:
+            self.last_error = "pygame not installed"
+            return
+        if not self.path.exists():
+            self.last_error = f"missing soundtrack: {self.path}"
+            return
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            self._ready = True
+        except Exception as exc:
+            self.last_error = str(exc)
+
+    @property
+    def configured(self) -> bool:
+        return self.path is not None
+
+    @property
+    def ready(self) -> bool:
+        return self._ready and self.path is not None
+
+    def summary(self) -> str:
+        if not self.configured:
+            return "soundtrack disabled"
+        if self.ready:
+            return f"{self.path.name}\nfade: {self.fade_sec:.2f}s"
+        if self.last_error:
+            return f"soundtrack unavailable\n{self.last_error}"
+        return "soundtrack pending"
+
+    def play(self) -> None:
+        if not self.ready or self.path is None or pygame is None:
+            return
+        try:
+            if not self._loaded:
+                pygame.mixer.music.load(str(self.path))
+                self._loaded = True
+            pygame.mixer.music.play(loops=-1, fade_ms=int(self.fade_sec * 1000))
+            self._playing = True
+        except Exception as exc:
+            self.last_error = str(exc)
+
+    def fade_out(self) -> None:
+        if not self.ready or not self._playing or pygame is None:
+            return
+        try:
+            pygame.mixer.music.fadeout(int(self.fade_sec * 1000))
+        except Exception as exc:
+            self.last_error = str(exc)
+        finally:
+            self._playing = False
+
+    def close(self) -> None:
+        self.fade_out()
+
+
 class LoomPlayerApp:
     def __init__(self, descriptor_path: Path) -> None:
         self.descriptor_path = descriptor_path
@@ -222,6 +316,7 @@ class LoomPlayerApp:
         self.triggered_transients: set[str] = set()
         self.narrator = Narrator.from_descriptor(self.descriptor)
         self.voice = VoiceSpeaker(self.descriptor)
+        self.soundtrack = SoundtrackBed(self.descriptor, self.descriptor_path)
         if self.voice.required and not self.voice.ready:
             detail = self.voice.last_error or "Voice playback is not ready for this descriptor."
             raise RuntimeError(detail)
@@ -255,6 +350,7 @@ class LoomPlayerApp:
         self.club_var = tk.StringVar(value=self._club_summary())
         self.voice_var = tk.StringVar(value=self._voice_summary())
         self.visual_var = tk.StringVar(value=self._visual_summary())
+        self.soundtrack_var = tk.StringVar(value=self.soundtrack.summary())
         self.now_var = tk.StringVar(value="")
 
         self._build()
@@ -322,6 +418,7 @@ class LoomPlayerApp:
 
         self._side_card(side, "Club", self.club_var)
         self._side_card(side, "Voices", self.voice_var)
+        self._side_card(side, "Soundtrack", self.soundtrack_var)
         self._side_card(side, "Tape", self.visual_var)
         self._side_card(side, "Latest Beats", None)
         self.beats_list = tk.Listbox(side, bg=UI["panel"], fg=UI["text"], relief="flat", borderwidth=0, highlightthickness=0, font=FONT_SMALL)
@@ -434,6 +531,8 @@ class LoomPlayerApp:
             return
         self.playing = True
         self.play_started_at = time.perf_counter()
+        self.soundtrack.play()
+        self.soundtrack_var.set(self.soundtrack.summary())
         self.status_var.set("Playing")
         self.now_var.set("Broadcasting")
         self._media_loop()
@@ -450,6 +549,8 @@ class LoomPlayerApp:
         if self.media_after_id:
             self.root.after_cancel(self.media_after_id)
             self.media_after_id = None
+        self.soundtrack.fade_out()
+        self.soundtrack_var.set(self.soundtrack.summary())
         self.status_var.set("Paused")
         self.now_var.set("Paused")
 
@@ -569,6 +670,7 @@ class LoomPlayerApp:
         self._refresh_thumbnail()
         if self.media_loop is not None:
             self.media_loop.close()
+        self.soundtrack.close()
         self.root.destroy()
 
     def run(self) -> None:

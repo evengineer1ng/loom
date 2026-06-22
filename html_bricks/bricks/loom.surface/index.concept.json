@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "loom.surface.index",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "C:/Users/evana/OneDrive/Documents/oracle-radio/docs/index.html",
+  "version": "0.1.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["surface.html", "loom", "demo", "tape_singing"],
+  "side_effects": ["audio_output", "browser_runtime"],
+  "ui_slots": [],
+  "tags": ["loom", "html", "surface", "demo", "tape", "voice", "synthesis"],
+  "emoji": "🧵",
+  "description": "The canonical single-file Loom demo page: deterministic tape narration and browser-side singing with no server."
+}

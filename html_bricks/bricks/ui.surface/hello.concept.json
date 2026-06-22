@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "ui.surface.hello",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "hello.html",
+  "version": "1.0.0",
+  "deterministic": true,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["surface.html"],
+  "side_effects": [],
+  "ui_slots": [],
+  "tags": ["html", "surface", "example", "foundation"],
+  "emoji": "👋",
+  "description": "Minimal HTML surface brick: a self-contained page. The onboarding example for a non-python brick (asset + name.concept.json sidecar). An oradio can open straight to it."
+}

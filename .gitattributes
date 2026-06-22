@@ -1,6 +1,22 @@
 # Normalize line endings; keep LF in the repo so auto-commits stay quiet.
 * text=auto eol=lf
+# Binary artifacts — never line-ending-convert (would corrupt the bytes).
+*.oradio binary
 *.png binary
 *.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
 *.mp4 binary
-*.oradio text eol=lf
+*.mov binary
+*.webm binary
+*.mkv binary
+*.ogv binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
+*.zip binary
+*.sqlite binary
+# .loom is YAML text
+*.loom text eol=lf

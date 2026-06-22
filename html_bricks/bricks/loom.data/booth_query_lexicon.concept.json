@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "loom.data.booth_query_lexicon",
+  "kind": "data",
+  "lang": "json",
+  "asset": "D:/openclaw/opencloset/loom-main/docs/booth-query-lexicon.json",
+  "version": "0.1.0",
+  "deterministic": true,
+  "inputs": [],
+  "outputs": ["surface.json.v1"],
+  "requires": [],
+  "provides": ["data.json", "booth_query_lexicon", "query_normalization"],
+  "side_effects": [],
+  "ui_slots": [],
+  "tags": ["loom", "json", "data", "booth", "query", "lexicon", "normalization"],
+  "emoji": "📚",
+  "description": "The deterministic booth query lexicon JSON that normalizes inquiry vocabulary for booth surfaces and adapters."
+}

@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "loom.surface.ncm_portal",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "C:/Users/evana/OneDrive/Documents/oracle-radio/docs/ncm.html",
+  "version": "0.1.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["surface.html", "loom", "ncm", "portal", "lap_review"],
+  "side_effects": ["browser_runtime", "network_read"],
+  "ui_slots": [],
+  "tags": ["loom", "html", "surface", "motorsport", "portal", "race_state", "lap_review"],
+  "emoji": "🏁",
+  "description": "The Night City Motorsports portal surface: read-only replay by default, live relay when available, with deterministic paddock and lap-review views."
+}

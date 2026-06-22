@@ -7,6 +7,13 @@
 
 ## Current canon (authoritative, build against these)
 
+- **`docs/CANON_REPO_TOPOLOGY.md`** - the repo-scale shipping map. Defines the first public topology:
+  bootstrap opener + `kernel.oradio`, plus the split between `kernel`, `ribbon-os`, `radio-bricks`,
+  `atlas`, and `oradio-gallery`.
+- **`docs/REPO_MIGRATION.md`** - the extraction map from the current mixed staging grounds into the
+  canon repos. Includes the settled boundary that `bookmark.py` is kernel-class source, while
+  RibbonOS owns runtime playback/open/install machinery.
+
 - **`docs/THE_LOOM.md`** — the creation form. The Loom's **four** questions (universe · signals · skin ·
   transient surfaces) = the `.oradio` descriptor humanized. The one hardcoded design surface.
 - **`docs/SIMULATION_ENGINE.md`** — the engine / what `.oradio` decodes. Codec framing, the 5-verb organ

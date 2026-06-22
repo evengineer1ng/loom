@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "ui.surface.dbooth",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "D:/openclaw/opencloset/dbooth.html",
+  "version": "1.0.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["surface.html", "booth"],
+  "side_effects": [],
+  "ui_slots": [],
+  "tags": ["html", "surface", "foundation", "booth"],
+  "emoji": "🎚️",
+  "description": "The dbooth HTML surface as a foundation brick (timestamp/pitch booth). Prime example of an html page doing a lot on its own; an oradio can open straight to it."
+}

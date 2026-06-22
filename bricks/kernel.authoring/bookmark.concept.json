@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "kernel.authoring.bookmark",
+  "kind": "kernel",
+  "lang": "python",
+  "asset": "../../bookmark.py",
+  "version": "0.1.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["oradio.minted.v1"],
+  "requires": [],
+  "provides": ["authoring", "mint", "kernel", "bookmark"],
+  "side_effects": ["file_write", "subprocess", "ui"],
+  "ui_slots": [],
+  "tags": ["kernel", "authoring", "mint", "bookmark", "coarse", "foundation"],
+  "emoji": "🔖",
+  "description": "Bookmark — the .oradio authoring kernel (the minter + brick canvas + courtroom). Onboarded AS a single coarse brick via this sidecar so the kernel is legitimately brick-composed WITHOUT execing/decomposing the 10k-line app yet. Run it directly (python bookmark.py); a true 1:1 brick decomposition replaces this coarse brick later."
+}

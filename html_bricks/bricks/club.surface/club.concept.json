@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "club.surface.manager",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "club.html",
+  "version": "0.1.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["club", "surface.html", "onboarding"],
+  "side_effects": ["network_read", "install"],
+  "ui_slots": [],
+  "tags": ["club", "surface", "onboarding", "package-manager", "foundation"],
+  "emoji": "🎟️",
+  "description": "The Club — the highest-level brick. The dependency hub / onboarding wizard that opens (with permission) when you first click an oradio: download RibbonOS, the kernel package, and bricks. Ships in the kernel by default; reopenable as the Club manager. Install logic is fulfilled by the kernel; this brick is the surface."
+}

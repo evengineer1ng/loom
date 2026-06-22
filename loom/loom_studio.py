@@ -265,6 +265,8 @@ class LoomFormState:
     loop_mode: str
     builtin_theme: str
     loop_path: str
+    soundtrack_path: str
+    soundtrack_fade_sec: float
     voice_provider: str
     voice_assignments: Dict[str, str]
     transient_enabled: bool
@@ -373,6 +375,17 @@ def build_visual_descriptor(state: LoomFormState, station_id: str) -> Dict[str, 
     }
 
 
+def build_soundtrack_descriptor(state: LoomFormState) -> Optional[Dict[str, Any]]:
+    path = state.soundtrack_path.strip()
+    if not path:
+        return None
+    return {
+        "path": path,
+        "loop": True,
+        "fade_sec": float(state.soundtrack_fade_sec),
+    }
+
+
 def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
     station_id = station_id_from_text(state.name)
     descriptor: Dict[str, Any] = {
@@ -460,6 +473,9 @@ def build_loom_descriptor(state: LoomFormState) -> Dict[str, Any]:
     theme_value = state.builtin_theme if state.loop_mode == "builtin" else state.loop_path.strip()
     descriptor["theme"] = theme_value or DEFAULT_THEME
     descriptor["visual"] = build_visual_descriptor(state, station_id)
+    soundtrack = build_soundtrack_descriptor(state)
+    if soundtrack is not None:
+        descriptor["soundtrack"] = soundtrack
 
     raw_voice = {
         "provider": state.voice_provider,
@@ -521,6 +537,8 @@ class LoomStudioApp:
         self.loop_mode_var = tk.StringVar(value="builtin")
         self.theme_var = tk.StringVar(value=DEFAULT_THEME)
         self.loop_path_var = tk.StringVar(value="")
+        self.soundtrack_path_var = tk.StringVar(value="")
+        self.soundtrack_fade_sec_var = tk.StringVar(value="1.25")
         self.voice_provider_var = tk.StringVar(value="kokoro")
         self.visual_family_vars = {
             key: tk.BooleanVar(value=True) for key, _label in VISUAL_FAMILY_OPTIONS
@@ -689,10 +707,13 @@ class LoomStudioApp:
         self._combo_row(parent, 1, "Theme pack", self.theme_var, list(DEFAULT_THEME_PACKS.keys()))
         self._entry_row(parent, 2, "Loop path", self.loop_path_var, 58)
         tk.Button(parent, text="Browse", command=self._browse_loop, bg=UI["panel_2"], fg=UI["text"], relief="flat").grid(row=2, column=3, padx=6, sticky="w")
-        self._checkbox_row(parent, 3, "Tape layers", self.visual_family_vars)
-        self._combo_row(parent, 4, "Voice provider", self.voice_provider_var, VOICE_PROVIDERS)
-        tk.Label(parent, text="Voice assignments (one per line, `role=value`)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=5, column=0, columnspan=4, sticky="w", pady=(8, 4))
-        self.voice_text.grid(row=6, column=0, columnspan=4, sticky="ew")
+        self._entry_row(parent, 3, "Soundtrack path", self.soundtrack_path_var, 58)
+        tk.Button(parent, text="Browse", command=self._browse_soundtrack, bg=UI["panel_2"], fg=UI["text"], relief="flat").grid(row=3, column=3, padx=6, sticky="w")
+        self._entry_row(parent, 4, "Soundtrack fade sec", self.soundtrack_fade_sec_var, 10)
+        self._checkbox_row(parent, 5, "Tape layers", self.visual_family_vars)
+        self._combo_row(parent, 6, "Voice provider", self.voice_provider_var, VOICE_PROVIDERS)
+        tk.Label(parent, text="Voice assignments (one per line, `role=value`)", font=FONT_SMALL, fg=UI["muted"], bg=UI["panel"]).grid(row=7, column=0, columnspan=4, sticky="w", pady=(8, 4))
+        self.voice_text.grid(row=8, column=0, columnspan=4, sticky="ew")
 
     def _build_question_four(self, parent: tk.Widget) -> None:
         tk.Checkbutton(
@@ -784,6 +805,16 @@ class LoomStudioApp:
             self.loop_mode_var.set("custom")
             self.refresh_preview()
 
+    def _browse_soundtrack(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Choose optional Loom soundtrack",
+            filetypes=[("Audio", "*.mp3 *.wav *.ogg *.flac *.m4a"), ("All files", "*.*")],
+        )
+        if path:
+            self.soundtrack_path_var.set(path)
+            self.refresh_preview()
+
     def _write_thumbnail_for_descriptor(self, descriptor: Dict[str, Any], path: Path) -> Path:
         from oradio_engine.visual_tape import VisualTapeLog
 
@@ -844,6 +875,10 @@ class LoomStudioApp:
             min_priority = float(self.transient_min_priority_var.get().strip() or "0.6")
         except ValueError as exc:
             raise ValueError("Transient minimum priority must be numeric.") from exc
+        try:
+            soundtrack_fade_sec = float(self.soundtrack_fade_sec_var.get().strip() or "1.25")
+        except ValueError as exc:
+            raise ValueError("Soundtrack fade seconds must be numeric.") from exc
         reverse = {label: key for key, label in WORLD_OPTIONS}
         return LoomFormState(
             name=self.name_var.get().strip(),
@@ -855,6 +890,8 @@ class LoomStudioApp:
             loop_mode=self.loop_mode_var.get().strip() or "builtin",
             builtin_theme=self.theme_var.get().strip() or DEFAULT_THEME,
             loop_path=self.loop_path_var.get().strip(),
+            soundtrack_path=self.soundtrack_path_var.get().strip(),
+            soundtrack_fade_sec=soundtrack_fade_sec,
             voice_provider=self.voice_provider_var.get().strip() or "none",
             voice_assignments=parse_voice_assignments(self.voice_text.get("1.0", "end")),
             transient_enabled=bool(self.transient_enabled_var.get()),

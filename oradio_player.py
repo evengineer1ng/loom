@@ -294,6 +294,165 @@ def launch_descriptor_oradio(
     return loom_player_ui.main([str(package_path)])
 
 
+def _load_shortcut_brick():
+    """Load the shortcut/launcher brick (bricks/ui.shortcut/launch_shortcut.py) by path — its
+    folder name isn't an importable package."""
+    import importlib.util
+    p = BASE_DIR / "bricks" / "ui.shortcut" / "launch_shortcut.py"
+    spec = importlib.util.spec_from_file_location("launch_shortcut", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _ask_yes_no(title: str, message: str) -> bool:
+    """A tiny modal yes/no. Returns False if no GUI is available (caller then just prints)."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        ans = messagebox.askyesno(title, message)
+        root.destroy()
+        return bool(ans)
+    except Exception:
+        return False
+
+
+def _launch_ribbon_shell(oradio_path: Optional[str] = None) -> int:
+    """Open the RibbonOS shell (the in-house home for a loop oradio). Best-effort spawn."""
+    shell = BASE_DIR / "ribbon_os_shell.py"
+    if not shell.exists():
+        print("RibbonOS shell not found on this machine.", file=sys.stderr)
+        return 2
+    try:
+        subprocess.Popen([sys.executable, str(shell)], cwd=str(BASE_DIR))
+        print("Opening RibbonOS...")
+        return 0
+    except Exception as exc:
+        print(f"Could not open RibbonOS: {exc}", file=sys.stderr)
+        return 2
+
+
+def _open_shortcut_plan(plan: Dict[str, Any]) -> int:
+    target = str(plan.get("target", "")).strip()
+    if not target:
+        print("This oradio is a shortcut but has no target set.", file=sys.stderr)
+        return 2
+    try:
+        info = _load_shortcut_brick().launch(
+            target, kind=plan.get("launch", "auto"),
+            args=plan.get("args"), cwd=plan.get("cwd"))
+        print(f"Launched shortcut [{info.get('kind', '')}]: {target}")
+        return 0
+    except Exception as exc:
+        print(f"Could not launch shortcut '{target}': {exc}", file=sys.stderr)
+        return 2
+
+
+def _open_html_plan(package_path: Path) -> int:
+    from bookmark.brick_kernel import BrickRegistry
+    from bookmark.launch import default_bricks_root, open_oradio
+    reg = BrickRegistry.from_path(default_bricks_root())
+    res = open_oradio(package_path, registry=reg, open_browser=True)
+    if res.get("error"):
+        print(f"Could not open html surface: {res['error']}", file=sys.stderr)
+        return 2
+    print(f"Serving {Path(package_path).name}: {res.get('url')}")
+    httpd = res.get("httpd")
+    if httpd is not None:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            try:
+                httpd.shutdown()
+            except Exception:
+                pass
+    return 0
+
+
+def _open_app_plan(
+    plan: Dict[str, Any], package_path: Path, *,
+    headless: bool = False, wait: bool = True, extract_dir: Optional[Path] = None,
+) -> int:
+    """Run the oradio's authored brick-app (the kernel -> bookmark.py). The brick code is resolved
+    from the install (never bundled), so a machine without it degrades to the loop offer."""
+    asset = plan.get("asset")
+    if plan.get("lang") != "python" or not asset or not Path(asset).exists():
+        # resolved id but the code isn't here (or isn't runnable) -> graceful loop offer
+        return _open_loop_plan({**plan, "mode": "loop",
+                                "unresolved_brick": plan.get("brick_id")}, headless=headless)
+
+    # Extract the bundle so a brick-app can read its OWN oradio (STATION_DIR); harmless for kernel.
+    if extract_dir is None:
+        extract_dir = Path(tempfile.mkdtemp(prefix="oradio_app_"))
+    try:
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(package_path) as zf:
+            zf.extractall(extract_dir)
+    except Exception:
+        pass
+
+    env = os.environ.copy()
+    env["STATION_DIR"] = str(extract_dir)
+    env["RADIO_OS_ROOT"] = str(BASE_DIR)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
+    cmd = [sys.executable, "-u", str(asset)]
+    kwargs: Dict[str, Any] = {"cwd": str(BASE_DIR), "env": env}
+    if sys.platform == "win32" and not os.environ.get("RADIO_OS_SHOW_CONSOLE"):
+        try:
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        except Exception:
+            pass
+    proc = subprocess.Popen(cmd, **kwargs)
+    print(f"Opened {Path(package_path).name} -> {plan.get('brick_id')} (PID {proc.pid})")
+    if not wait:
+        return 0
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        try:
+            return proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+            return proc.wait()
+
+
+def _open_loop_plan(plan: Dict[str, Any], *, headless: bool = False) -> int:
+    """A pure visual-loop oradio (or an app whose brick isn't installed) is "empty" from the file
+    manager's view — offer to open it in RibbonOS (the in-house home). No standalone player by
+    design (a player would be a brick the author chose not to add)."""
+    name = Path(plan.get("oradio", "")).name or "This oradio"
+    if plan.get("unresolved_brick"):
+        msg = (f"{name} is an app oradio, but its brick '{plan['unresolved_brick']}' isn't installed "
+               f"here, so its app can't run. It can still show its visual loop in RibbonOS.")
+    else:
+        msg = f"{name} is a visual-loop oradio (no app or shortcut)."
+    if headless:
+        print(msg, file=sys.stderr)
+        return 0
+    if _ask_yes_no("Open oradio", f"{msg}\n\nOpen it in RibbonOS?"):
+        return _launch_ribbon_shell(plan.get("oradio"))
+    print(msg)
+    return 0
+
+
+def _is_legacy_station_zip(package_path: Path) -> bool:
+    """True for a pre-mint zip station package (manifest.yaml inside), which still uses the old
+    oradio_runtime.py kernel path."""
+    try:
+        if not zipfile.is_zipfile(package_path):
+            return False
+        with zipfile.ZipFile(package_path) as zf:
+            return "manifest.yaml" in zf.namelist()
+    except Exception:
+        return False
+
+
 def launch_oradio(
     package_path: Path,
     *,
@@ -304,11 +463,46 @@ def launch_oradio(
     extract_dir: Optional[Path] = None,
     gui_gate: bool = False,
 ) -> int:
-    # A descriptor-style .oradio (the Loom authoring path) is a plain YAML file, not a
-    # zip package. Route those through the descriptor-first club gate and player path.
-    if package_path.is_file() and not zipfile.is_zipfile(package_path):
-        return launch_descriptor_oradio(package_path, gui_gate=gui_gate)
+    """The single double-click entry point. Resolves the open plan (shared with RibbonOS — see
+    bookmark/launch.py::resolve_open_plan) and dispatches so an oradio opens to the SAME thing from
+    the file manager as from the carousel/galaxy."""
+    package_path = Path(package_path)
+    from bookmark.launch import resolve_open_plan
+    plan = resolve_open_plan(package_path)
+    mode = plan.get("mode")
 
+    if mode == "descriptor":
+        return launch_descriptor_oradio(package_path, gui_gate=gui_gate)
+    if mode == "shortcut":
+        return _open_shortcut_plan(plan)
+    if mode == "html":
+        return _open_html_plan(package_path)
+    if mode == "app":
+        return _open_app_plan(plan, package_path, headless=headless, wait=wait, extract_dir=extract_dir)
+    if mode == "loop":
+        return _open_loop_plan(plan, headless=headless)
+    # mode == "error": a genuinely-legacy zip station package still runs the old runtime path.
+    if _is_legacy_station_zip(package_path):
+        return _launch_legacy_station(
+            package_path, headless=headless, local_audio=local_audio,
+            check_llm=check_llm, wait=wait, extract_dir=extract_dir, gui_gate=gui_gate)
+    print(f"Could not open {package_path.name}: {plan.get('error', 'unrecognized oradio')}",
+          file=sys.stderr)
+    return 2
+
+
+def _launch_legacy_station(
+    package_path: Path,
+    *,
+    headless: bool = False,
+    local_audio: bool = False,
+    check_llm: bool = True,
+    wait: bool = True,
+    extract_dir: Optional[Path] = None,
+    gui_gate: bool = False,
+) -> int:
+    """The pre-mint station-package path: extract + resolver ladder + spawn oradio_runtime.py.
+    Kept for back-compat with legacy manifest.yaml zip packages only."""
     if not RUNTIME_PATH.exists():
         print(f"Playback kernel not found: {RUNTIME_PATH}", file=sys.stderr)
         return 2

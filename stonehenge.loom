@@ -1,0 +1,25 @@
+universe: stonehenge
+oradios:
+- id: kernel
+  label: kernel
+  oradio: C:/Users/evana/OneDrive/Documents/oracle-radio/exports/kernel.oradio
+  soulmate: ''
+  soulmates: []
+- id: iracing
+  label: iRacing
+  oradio: C:/Users/evana/OneDrive/Documents/oracle-radio/exports/iRacing.oradio
+  soulmate: kernel
+  soulmates:
+  - kernel
+- id: cyberpunk2077
+  label: cyberpunk2077
+  oradio: C:/Users/evana/OneDrive/Documents/oracle-radio/exports/cyberpunk2077.oradio
+  soulmate: kernel
+  soulmates:
+  - kernel
+- id: eve-online
+  label: Eve Online
+  oradio: C:/Users/evana/OneDrive/Documents/oracle-radio/exports/eve-onliie.oradio
+  soulmate: kernel
+  soulmates:
+  - kernel

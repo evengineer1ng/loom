@@ -1,0 +1,18 @@
+{
+  "api_version": "loom.concept.v1",
+  "id": "loom.surface.booth",
+  "kind": "surface",
+  "lang": "html",
+  "asset": "C:/Users/evana/OneDrive/Documents/oracle-radio/docs/booth.html",
+  "version": "0.1.0",
+  "deterministic": false,
+  "inputs": [],
+  "outputs": ["surface.html.v1"],
+  "requires": [],
+  "provides": ["surface.html", "loom", "booth", "voice_lab"],
+  "side_effects": ["audio_output", "browser_runtime"],
+  "ui_slots": [],
+  "tags": ["loom", "html", "surface", "booth", "voice", "causal_thread", "inquiry"],
+  "emoji": "🎤",
+  "description": "The richer Loom Booth surface: deterministic singing, causal thread pulling, inquiry prompts, and tape mixing in one browser page."
+}

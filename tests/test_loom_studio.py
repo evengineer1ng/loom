@@ -13,6 +13,8 @@ def _state(**overrides):
         loop_mode="builtin",
         builtin_theme="ribbon",
         loop_path="",
+        soundtrack_path="",
+        soundtrack_fade_sec=1.25,
         voice_provider="kokoro",
         voice_assignments={"host": "af_sarah", "analyst": "am_adam"},
         transient_enabled=True,
@@ -163,6 +165,18 @@ def test_build_loom_descriptor_authors_custom_media_visual_base():
     assert descriptor["theme"] == "C:/loops/organism.mp4"
     assert descriptor["visual"]["base"]["mode"] == "media"
     assert descriptor["visual"]["base"]["path"] == "C:/loops/organism.mp4"
+
+
+def test_build_loom_descriptor_authors_optional_soundtrack():
+    descriptor = build_loom_descriptor(
+        _state(
+            soundtrack_path="C:/loops/organism.mp3",
+            soundtrack_fade_sec=2.5,
+        )
+    )
+    assert descriptor["soundtrack"]["path"] == "C:/loops/organism.mp3"
+    assert descriptor["soundtrack"]["loop"] is True
+    assert descriptor["soundtrack"]["fade_sec"] == 2.5
 
 
 def _forkuniverse_state(name, premise, genres):
