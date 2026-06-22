@@ -46,6 +46,9 @@ club/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+# ...but a BRICK package is named `storage.sqlite` — don't let the DB rule eat its source.
+!**/storage.sqlite/
+!**/storage.sqlite/**
 station_memory.json
 status.json
 .active_loom.json
