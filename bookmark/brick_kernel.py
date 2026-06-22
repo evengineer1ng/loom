@@ -492,14 +492,17 @@ def _emoji_pool() -> List[str]:
     return _EMOJI_POOL_CACHE
 
 
-# Mined brick troves (see memory: brick-contract-loom-concept-v1). Mining is ongoing — add a
-# path here and every surface (Bookmark, palette, canvas) sees the new bricks.
-ATL_BRICKS = Path(r"C:\Users\evana\Documents\freqtradebotchallenge\wanda\atl_bricks\bricks")
-RADIO_BRICKS = Path(r"C:\Users\evana\OneDrive\Documents\Radio-OS\radio_bricks\bricks")
+# Mined brick troves (see memory: brick-contract-loom-concept-v1). Now VAULTED IN-REPO + repo-
+# relative, so the garden travels with a clone (no machine-specific paths) and is git-safe. Add a
+# path here and every surface (Bookmark, palette, canvas) sees the new bricks. discover() skips a
+# missing root, so dropping a trove is harmless.
+_REPO = Path(__file__).resolve().parent.parent
+ATL_BRICKS = _REPO / "atl_bricks" / "bricks"      # the 150 mined atl bricks (was external)
+RADIO_BRICKS = _REPO / "radio_bricks" / "bricks"  # the 469 mined radio bricks (was external)
 # Polyglot trove: non-python (html/json) bricks declared via name.concept.json sidecars.
-HTML_BRICKS = Path(__file__).resolve().parent.parent / "html_bricks" / "bricks"
+HTML_BRICKS = _REPO / "html_bricks" / "bricks"
 # oracle-radio's own (kernel-side) python bricks — e.g. the picture-frame carousel decorator.
-LOCAL_BRICKS = Path(__file__).resolve().parent.parent / "bricks"
+LOCAL_BRICKS = _REPO / "bricks"
 BRICK_ROOTS = [ATL_BRICKS, RADIO_BRICKS, HTML_BRICKS, LOCAL_BRICKS]
 
 
